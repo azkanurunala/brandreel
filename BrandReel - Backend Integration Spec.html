@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BrandReel — Backend Integration Spec</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" />
+<style>
+  :root{
+    --ink:#16131C; --ink2:#3C3746; --ink3:#6E6878; --hair:#E4E1EA; --hair2:#EFEDF3;
+    --violet:#6A5AF0; --violet2:#8A7BFF; --accent:#1FA971; --warn:#E0A11B; --neg:#E0413B;
+    --paper:#fff; --desk:#ECEAE3; --code:#F6F5FB;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--desk);color:var(--ink);
+    font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.55;}
+  .doc{padding:40px 20px 80px;}
+  .page{max-width:816px;margin:0 auto 26px;background:var(--paper);border-radius:3px;
+    box-shadow:0 2px 14px rgba(20,16,30,0.09);padding:70px 72px;position:relative;}
+
+  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;letter-spacing:-0.8px;margin:0 0 6px;line-height:1.08;}
+  h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18.5px;letter-spacing:-0.3px;margin:34px 0 4px;
+    padding-top:18px;border-top:1px solid var(--hair);}
+  h2:first-of-type{border-top:none;padding-top:0;}
+  h3{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14.5px;margin:20px 0 6px;color:var(--ink);}
+  p{margin:8px 0;font-size:13.7px;color:var(--ink2);}
+  strong{color:var(--ink);font-weight:600;}
+  a{color:var(--violet);text-decoration:none;}
+  small{color:var(--ink3);}
+
+  .eyebrow{font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--violet);font-weight:600;}
+  .lede{font-size:15px;color:var(--ink2);margin:12px 0 4px;line-height:1.6;}
+
+  .mono{font-family:'Geist Mono',monospace;}
+  code{font-family:'Geist Mono',monospace;font-size:12px;background:var(--code);border:1px solid var(--hair);
+    border-radius:5px;padding:1px 6px;color:#4B3FB0;white-space:nowrap;}
+  pre{font-family:'Geist Mono',monospace;font-size:11.6px;background:#15131D;color:#E7E3F5;border-radius:9px;
+    padding:15px 17px;overflow-x:auto;line-height:1.62;margin:10px 0;}
+  pre .k{color:#9A8CFF;} pre .s{color:#7FD6A6;} pre .c{color:#6E6878;} pre .m{color:#E0A11B;}
+
+  ul,ol{margin:8px 0;padding-left:20px;}
+  li{font-size:13.7px;color:var(--ink2);margin:4px 0;}
+  li strong{color:var(--ink);}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.4px;}
+  th{text-align:left;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.8px;text-transform:uppercase;
+    color:var(--ink3);font-weight:600;padding:7px 9px;border-bottom:1.5px solid var(--hair);vertical-align:bottom;}
+  td{padding:8px 9px;border-bottom:1px solid var(--hair2);color:var(--ink2);vertical-align:top;line-height:1.45;}
+  td strong{color:var(--ink);}
+  tr{break-inside:avoid;}
+
+  .tag{display:inline-block;font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:0.4px;
+    padding:2px 7px;border-radius:99px;vertical-align:middle;}
+  .t-get{background:#1FA97118;color:#147a52;} .t-post{background:#6A5AF018;color:#4B3FB0;}
+  .t-del{background:#E0413B16;color:#b8362f;} .t-real{background:#1FA97118;color:#147a52;}
+  .t-mock{background:#E0A11B1E;color:#9a6f12;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0;}
+  .card{border:1px solid var(--hair);border-radius:11px;padding:14px 16px;background:#FCFBFE;break-inside:avoid;}
+  .card h3{margin-top:0;}
+  .card .mono{font-size:10.5px;color:var(--ink3);}
+
+  .callout{border-left:3px solid var(--violet);background:#6A5AF00A;border-radius:0 9px 9px 0;padding:11px 15px;margin:14px 0;break-inside:avoid;}
+  .callout.warn{border-color:var(--warn);background:#E0A11B0E;}
+  .callout p{margin:3px 0;font-size:12.8px;}
+  .callout .eyebrow{color:var(--ink);}
+
+  .flow{display:flex;align-items:stretch;gap:8px;margin:14px 0;flex-wrap:wrap;}
+  .flow .node{flex:1;min-width:120px;border:1px solid var(--hair);border-radius:10px;padding:11px 12px;background:#FCFBFE;}
+  .flow .node .mono{font-size:9px;letter-spacing:1px;color:var(--violet);text-transform:uppercase;}
+  .flow .node b{font-family:'Space Grotesk',sans-serif;font-size:13px;display:block;margin:3px 0 2px;}
+  .flow .node span{font-size:11.5px;color:var(--ink3);}
+  .flow .arr{display:flex;align-items:center;color:var(--ink3);font-size:18px;}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 2px;}
+  .legend span{font-size:11.5px;color:var(--ink2);display:flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:99px;display:inline-block;}
+
+  .foot{position:absolute;bottom:30px;left:72px;right:72px;display:flex;justify-content:space-between;
+    font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:0.6px;color:var(--ink3);text-transform:uppercase;
+    border-top:1px solid var(--hair2);padding-top:9px;}
+
+  .cover-mark{display:flex;align-items:center;gap:11px;margin-bottom:30px;}
+  .cover-mark .glyph{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--violet),var(--violet2));
+    display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px -8px var(--violet);}
+  .cover-mark .glyph i{width:15px;height:15px;border-radius:99px;background:#fff;display:block;}
+  .cover-mark b{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;}
+  .cover-mark b span{color:var(--violet);}
+
+  @media print{
+    html,body{background:#fff;}
+    .doc{padding:0;}
+    .page{box-shadow:none;border-radius:0;margin:0;max-width:none;padding:0;}
+    h2{break-after:avoid;} h3{break-after:avoid;}
+    .card,.callout,.flow,table,pre{break-inside:avoid;}
+    .page{break-after:page;}
+    .foot{position:fixed;}
+    *{print-color-adjust:exact;-webkit-print-color-adjust:exact;}
+    @page{margin:0.7in;}
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<!-- ───────────────────────── COVER / OVERVIEW ───────────────────────── -->
+<section class="page">
+  <div class="cover-mark"><span class="glyph"><i></i></span><b>Brand<span>Reel</span></b></div>
+
+  <div class="eyebrow">Engineering Handoff · v1.0</div>
+  <h1>Backend Integration Spec</h1>
+  <p class="lede">How to turn the BrandReel prototype's mocked publishing, OAuth, and analytics
+  into production API calls — the services to build, the secret boundary, the per-platform
+  contracts, and the exact REST surface the client already expects.</p>
+
+  <div class="callout">
+    <div class="eyebrow" style="margin-bottom:4px;">Read this first</div>
+    <p>The prototype is a <strong>client-side React app</strong>. Two integrations in it are already
+    real — <strong>Claude</strong> (hook scripts + caption adaptation) and <strong>Google Veo</strong>
+    (clip generation). Everything else — social publishing, OAuth sign-in, live insights — is a
+    faithful mock. None of those can run from the browser: they require server-held secrets and
+    platform-approved apps. This doc specifies the <strong>BrandReel API</strong> backend that
+    brokers them.</p>
+  </div>
+
+  <h2>What's real vs. what this doc covers</h2>
+  <table>
+    <thead><tr><th style="width:30%">Capability</th><th style="width:14%">Today</th><th>Production path</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Hook scripts &amp; captions</strong><br><small>br-ai.jsx</small></td><td><span class="tag t-real">REAL</span></td><td>Move the Claude key server-side; proxy via <code>POST /generate</code>. Same prompts.</td></tr>
+      <tr><td><strong>Video clip generation</strong><br><small>br-video.jsx · Veo manifest</small></td><td><span class="tag t-real">REAL*</span></td><td>Veo call works; *blocked on org credits. Run server-side, store renders in object storage.</td></tr>
+      <tr><td><strong>OAuth / connect accounts</strong><br><small>br-oauth.jsx</small></td><td><span class="tag t-mock">MOCK</span></td><td>Server-side OAuth 2.0 per platform. §3–4.</td></tr>
+      <tr><td><strong>Publishing &amp; scheduling</strong><br><small>br-screens-campaign.jsx</small></td><td><span class="tag t-mock">MOCK</span></td><td>Per-platform publish adapters + scheduler. §5–7.</td></tr>
+      <tr><td><strong>Insights / analytics</strong><br><small>br-screens-insights.jsx</small></td><td><span class="tag t-mock">MOCK</span></td><td>Insight ingestion jobs + aggregation. §9.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Target architecture</h2>
+  <div class="flow">
+    <div class="node"><span class="mono">client</span><b>Prototype</b><span>React app. No secrets. Calls BrandReel API only.</span></div>
+    <div class="arr">→</div>
+    <div class="node"><span class="mono">your backend</span><b>BrandReel API</b><span>Auth broker · job queue · scheduler · webhook sink</span></div>
+    <div class="arr">→</div>
+    <div class="node"><span class="mono">third parties</span><b>Platform &amp; AI APIs</b><span>TikTok · IG · YouTube · LinkedIn · X · Claude · Veo</span></div>
+  </div>
+  <p>The client never holds a platform token or an AI key. It authenticates to <em>your</em> API with a
+  first-party session; the backend holds all third-party credentials, performs token exchange/refresh,
+  enforces rate limits, and owns the publish + analytics pipelines.</p>
+
+  <h3>Backend components to build</h3>
+  <ul>
+    <li><strong>Auth service</strong> — first-party sessions + OAuth broker for each platform (start, callback, refresh, revoke).</li>
+    <li><strong>Secret store</strong> — encrypted token vault (KMS-backed); never log tokens.</li>
+    <li><strong>Render workers</strong> — call Veo, transcode to each platform's spec, store to object storage + CDN.</li>
+    <li><strong>Publish workers + scheduler</strong> — per-platform adapters, stagger/rate-limit queue, retry with backoff.</li>
+    <li><strong>Webhook sink</strong> — receive async publish/transcode callbacks from platforms.</li>
+    <li><strong>Insights jobs</strong> — scheduled pulls of post metrics; aggregate to the Insights screen's shape.</li>
+  </ul>
+
+  <div class="foot"><span>BrandReel · Backend Integration Spec</span><span>Confidential · Page 1</span></div>
+</section>
+
+<!-- ───────────────────────── OAUTH ───────────────────────── -->
+<section class="page">
+  <h2>§3 · The secret boundary</h2>
+  <p>Each platform's publish scope requires an <strong>OAuth 2.0 authorization-code</strong> flow whose
+  <em>code-for-token</em> exchange uses a <strong>client secret</strong>. That exchange must happen on the
+  server. The browser only ever sees a short-lived redirect and your first-party session cookie.</p>
+
+  <h3>Generic connect flow</h3>
+  <div class="flow">
+    <div class="node"><b>1 · Start</b><span>Client hits <code>POST /auth/:platform/start</code>; API returns the provider consent URL (with <code>state</code>, PKCE).</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>2 · Consent</b><span>User approves on the platform. Maps to the prototype's OAuth consent sheet.</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>3 · Callback</b><span>Provider redirects to <code>/auth/:platform/callback</code>; <strong>server</strong> swaps code→tokens, stores them, links the connection.</span></div>
+  </div>
+
+  <pre><span class="c"># server-side token exchange — secret never leaves the backend</span>
+POST https://open.tiktokapis.com/v2/oauth/token/
+  client_key=<span class="m">$TIKTOK_CLIENT_KEY</span>  client_secret=<span class="m">$TIKTOK_CLIENT_SECRET</span>
+  grant_type=authorization_code  code=&lt;code&gt;  redirect_uri=&lt;cb&gt;  code_verifier=&lt;pkce&gt;
+<span class="c"># → { access_token, refresh_token, expires_in, open_id, scope }  → vault</span></pre>
+
+  <div class="callout warn">
+    <div class="eyebrow" style="margin-bottom:4px;">Token refresh = the prototype's "token refreshed 7d ahead"</div>
+    <p>Run a scheduler that refreshes each connection <strong>before</strong> expiry and flips the
+    connection's status to <code>expiring</code> / <code>expired</code> when a refresh fails — that's
+    exactly the state the Profile &amp; Inbox screens render today.</p>
+  </div>
+
+  <h2>§4 · Per-platform OAuth &amp; scopes</h2>
+  <p>Scopes below are the production equivalents of the consent rows already shown in
+  <code>BR_PLATFORMS</code> (br-theme.jsx). Verify against each provider's <em>current</em> docs —
+  platform APIs and review rules change often.</p>
+  <table>
+    <thead><tr><th style="width:13%">Platform</th><th style="width:20%">Auth provider</th><th>Publish + read scopes</th><th style="width:18%">Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>TikTok</strong></td><td>Login Kit (open.tiktokapis.com)</td><td><code>video.publish</code> <code>video.upload</code> <code>user.info.basic</code> <code>user.info.stats</code></td><td>Content Posting API. Unaudited apps post private-only until review.</td></tr>
+      <tr><td><strong>Instagram</strong></td><td>Facebook Login</td><td><code>instagram_basic</code> <code>instagram_content_publish</code> <code>pages_show_list</code> <code>business_management</code></td><td>Needs IG Business/Creator linked to a FB Page. App Review required.</td></tr>
+      <tr><td><strong>YouTube</strong></td><td>Google OAuth</td><td><code>youtube.upload</code> <code>youtube.readonly</code> <code>yt-analytics.readonly</code></td><td>Resumable upload. Sensitive-scope verification.</td></tr>
+      <tr><td><strong>LinkedIn</strong></td><td>LinkedIn OAuth</td><td><code>w_member_social</code> <code>r_basicprofile</code> (or <code>w_organization_social</code>)</td><td>Product access request (Share/Marketing).</td></tr>
+      <tr><td><strong>X</strong></td><td>X OAuth 2.0 (PKCE)</td><td><code>tweet.write</code> <code>tweet.read</code> <code>users.read</code> <code>offline.access</code></td><td>Paid API tier for write. Media via v1.1/v2 upload.</td></tr>
+      <tr><td><strong>Facebook</strong></td><td>Facebook Login</td><td><code>pages_manage_posts</code> <code>pages_read_engagement</code></td><td>Uses a Page access token, not the user token.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="eyebrow" style="margin-bottom:4px;">Lead time, not code</div>
+    <p>The slowest part of this project is <strong>platform app review</strong> (business verification,
+    posting-scope approval, demo videos). Start TikTok + Instagram review on day one — they gate the
+    whole publishing feature and can take weeks.</p>
+  </div>
+
+  <div class="foot"><span>BrandReel · Backend Integration Spec</span><span>Confidential · Page 2</span></div>
+</section>
+
+<!-- ───────────────────────── PUBLISH ADAPTERS ───────────────────────── -->
+<section class="page">
+  <h2>§5 · Publishing adapters</h2>
+  <p>One adapter per platform behind a common interface. Each enforces the format contract already
+  encoded in the prototype (<code>ratio</code>, <code>maxSec</code>, <code>capMax</code>,
+  <code>hashtags</code>) and returns a normalized result the publish pipeline can track.</p>
+
+  <pre><span class="k">interface</span> PublishAdapter {
+  validate(asset, caption): Preflight       <span class="c">// aspect · duration · codec · caption length</span>
+  publish(connection, asset, caption): { remoteId, permalink, state }
+  fetchInsights(connection, remoteId): { views, likes, comments, shares, reach }
+}</pre>
+
+  <div class="grid2">
+    <div class="card"><h3>TikTok · 9:16 · ≤60s</h3>
+      <p class="mono">PUBLISH</p>
+      <p>Content Posting API: <code>/v2/post/publish/video/init/</code> → chunked upload → poll
+      <code>/publish/status/fetch/</code>. Caption ≤150 chars, 5 tags.</p></div>
+    <div class="card"><h3>Instagram · 9:16 · ≤90s</h3>
+      <p class="mono">PUBLISH (2-step)</p>
+      <p>Create container <code>POST /{ig-user}/media</code> (<code>media_type=REELS</code>, public
+      <code>video_url</code>, caption) → <code>POST /{ig-user}/media_publish</code>. Caption ≤2200.</p></div>
+    <div class="card"><h3>YouTube · 9:16 · ≤60s</h3>
+      <p class="mono">UPLOAD</p>
+      <p><code>videos.insert</code> resumable upload; title/description, <code>#Shorts</code>.
+      Title-line ≤100 chars in the prototype's caption slot.</p></div>
+    <div class="card"><h3>LinkedIn · 1:1 · ≤90s</h3>
+      <p class="mono">REGISTER → UPLOAD → POST</p>
+      <p>Register video asset → upload binary → create a Post referencing the asset. Copy ≤700, 3 tags.</p></div>
+    <div class="card"><h3>X · 16:9 · ≤140s</h3>
+      <p class="mono">MEDIA UPLOAD → TWEET</p>
+      <p>Chunked media upload (INIT/APPEND/FINALIZE) → <code>POST /2/tweets</code> with <code>media_ids</code>. Copy ≤280, 2 tags.</p></div>
+    <div class="card"><h3>Facebook · 1:1 · ≤90s</h3>
+      <p class="mono">PAGE VIDEO POST</p>
+      <p><code>POST /{page-id}/videos</code> with Page token + description. Caption ≤2200, 4 tags.</p></div>
+  </div>
+
+  <h2>§6 · Publish pipeline &amp; scheduler</h2>
+  <p>The "Publishing" screen's queue → posted → retry → failed transitions become real worker states:</p>
+  <ol>
+    <li><strong>Pre-flight</strong> — run each adapter's <code>validate()</code>. This <em>is</em> the
+    prototype's pre-flight checklist (aspect/duration/codec, token validity, rate-limit clearance, dedupe, voice-match).</li>
+    <li><strong>Stagger / rate-limit</strong> — the scheduler spaces posts (e.g. TikTok 1 / 30 min) to
+    avoid shadow-bans — the "staggered to avoid rate limit" copy is literally this queue.</li>
+    <li><strong>Publish</strong> — adapter posts; persist <code>remoteId</code> + <code>permalink</code>.</li>
+    <li><strong>Retry</strong> — on <code>429</code>/transient errors, exponential backoff (the "X · 429 rate-limited, retry in 60s" log row).</li>
+    <li><strong>Auto-fix</strong> — on a spec rejection (the "IG aspect 9:16 expected, got 9:15" case),
+    re-transcode/smart-crop and re-queue rather than hard-failing.</li>
+  </ol>
+
+  <div class="callout">
+    <div class="eyebrow" style="margin-bottom:4px;">Map directly to existing UI states</div>
+    <p>Publish status enum <code>queued · posted · retry · failed</code> already drives
+    <code>br-screens-campaign.jsx</code>. Emit these verbatim and the Publishing screen lights up with
+    zero UI changes.</p>
+  </div>
+
+  <div class="foot"><span>BrandReel · Backend Integration Spec</span><span>Confidential · Page 3</span></div>
+</section>
+
+<!-- ───────────────────────── API SURFACE + DATA ───────────────────────── -->
+<section class="page">
+  <h2>§7 · BrandReel API surface</h2>
+  <p>The REST endpoints the client should call in place of today's mocks. JSON over HTTPS, first-party
+  session auth, all third-party work brokered server-side.</p>
+  <table>
+    <thead><tr><th style="width:8%">Verb</th><th style="width:34%">Path</th><th>Purpose · replaces</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/auth/:platform/start</code></td><td>Begin OAuth → returns consent URL · <small>br-oauth.jsx</small></td></tr>
+      <tr><td><span class="tag t-get">GET</span></td><td><code>/auth/:platform/callback</code></td><td>Code→token exchange, link connection (server)</td></tr>
+      <tr><td><span class="tag t-get">GET</span></td><td><code>/connections</code></td><td>Connected accounts + token health · <small>Profile</small></td></tr>
+      <tr><td><span class="tag t-del">DEL</span></td><td><code>/connections/:id</code></td><td>Revoke + delete token</td></tr>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/campaigns</code></td><td>Create campaign (name, logo, voice, platforms) · <small>BrCreate</small></td></tr>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/campaigns/:id/generate</code></td><td>Claude hooks + captions (proxy) · <small>br-ai.jsx</small></td></tr>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/campaigns/:id/renders</code></td><td>Queue Veo renders per hook×ratio · <small>br-video.jsx</small></td></tr>
+      <tr><td><span class="tag t-get">GET</span></td><td><code>/renders/:id</code></td><td>Render status + signed clip URL</td></tr>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/campaigns/:id/publish</code></td><td>Schedule/stagger to selected platforms · <small>BrPublishing</small></td></tr>
+      <tr><td><span class="tag t-get">GET</span></td><td><code>/campaigns/:id/status</code></td><td>Per-platform publish states (poll or SSE)</td></tr>
+      <tr><td><span class="tag t-get">GET</span></td><td><code>/insights?range=</code></td><td>Aggregated metrics · <small>BrInsights</small></td></tr>
+      <tr><td><span class="tag t-post">POST</span></td><td><code>/webhooks/:platform</code></td><td>Async publish/transcode callbacks (platform → API)</td></tr>
+    </tbody>
+  </table>
+
+  <pre><span class="c">// POST /campaigns/:id/publish</span>
+{ <span class="k">"variations"</span>: [
+    { <span class="k">"hook"</span>: <span class="s">"h3"</span>, <span class="k">"platform"</span>: <span class="s">"tiktok"</span>, <span class="k">"renderId"</span>: <span class="s">"rnd_8x.."</span>, <span class="k">"caption"</span>: <span class="s">"…"</span> }
+  ],
+  <span class="k">"schedule"</span>: { <span class="k">"mode"</span>: <span class="s">"stagger"</span>, <span class="k">"perPlatformGapMin"</span>: <span class="m">30</span> } }
+<span class="c">// → 202 { jobId, perPlatform: [{ platform, state:"queued", eta }] }</span></pre>
+
+  <h2>§8 · Core data model</h2>
+  <table>
+    <thead><tr><th style="width:22%">Entity</th><th>Key fields</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Account</strong></td><td>id, persona/role (RBAC), plan, postQuota — gates features as in <code>BR_PERSONAS.can</code></td></tr>
+      <tr><td><strong>Connection</strong></td><td>accountId, platform, remoteUserId, <em>tokenRef</em> (vault), scopes, status, expiresAt</td></tr>
+      <tr><td><strong>BrandKit</strong></td><td>accountId, voice, logo, colors — feeds Claude prompts</td></tr>
+      <tr><td><strong>Campaign</strong></td><td>id, product, desc, platforms[], status, topHook</td></tr>
+      <tr><td><strong>Render</strong></td><td>campaignId, hook, ratio, provider (veo/canvas), storageUrl, durationS, state</td></tr>
+      <tr><td><strong>Post</strong></td><td>campaignId, hook, platform, renderId, caption, remoteId, permalink, state, scheduledAt</td></tr>
+      <tr><td><strong>InsightSnapshot</strong></td><td>postId, capturedAt, views, likes, comments, shares, reach</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot"><span>BrandReel · Backend Integration Spec</span><span>Confidential · Page 4</span></div>
+</section>
+
+<!-- ───────────────────────── INSIGHTS + AI + ENV + ROLLOUT ───────────────────────── -->
+<section class="page">
+  <h2>§9 · Insights ingestion</h2>
+  <p>Replace the "Momentum" mock with a scheduled job per live <code>Post</code>: pull metrics from each
+  platform's analytics endpoint (or receive via webhook), write an <code>InsightSnapshot</code>, and
+  aggregate into the Insights screen's existing shape — totals, by-platform, by-hook-angle, top performer.</p>
+  <ul>
+    <li><strong>TikTok</strong> video query / insights · <strong>Instagram</strong> media insights ·
+    <strong>YouTube</strong> Analytics API · <strong>LinkedIn</strong> social actions · <strong>X</strong> tweet metrics.</li>
+    <li>Cadence: dense (5–15 min) for the first 2 hours — the "monitoring first 2 hours" copy — then taper to hourly/daily.</li>
+    <li>Derive the recommendation card ("Hook 2 underperforms on LinkedIn") from by-hook×platform deltas.</li>
+  </ul>
+
+  <h2>§10 · AI layer — already real, keep server-side</h2>
+  <p>Move both providers behind the API so keys never ship to the client; prompts are unchanged from the prototype.</p>
+  <ul>
+    <li><strong>Claude</strong> — the campaign prompt (5 hooks + captions + hashtags) and the per-platform
+    caption adapter in <code>br-ai.jsx</code>. Keep the JSON-shape contract + template fallback.</li>
+    <li><strong>Veo</strong> — model <code>veo3.1-fast</code>, aspect from platform (<code>9:16 / 1:1 / 16:9</code>),
+    4–8s. Persist outputs and register them in the same manifest shape (<code>campaign→hook→ratio→url</code>)
+    the client already reads (<code>br-veo-manifest.jsx</code>). Canvas render stays as the instant fallback.</li>
+  </ul>
+
+  <h2>§11 · Secrets &amp; environment</h2>
+  <pre><span class="c"># AI</span>
+ANTHROPIC_API_KEY        VEO_API_KEY / GOOGLE_PROJECT
+<span class="c"># OAuth client credentials (per platform)</span>
+TIKTOK_CLIENT_KEY  TIKTOK_CLIENT_SECRET
+META_APP_ID  META_APP_SECRET            <span class="c"># Instagram + Facebook</span>
+GOOGLE_CLIENT_ID  GOOGLE_CLIENT_SECRET  <span class="c"># YouTube</span>
+LINKEDIN_CLIENT_ID  LINKEDIN_CLIENT_SECRET
+X_CLIENT_ID  X_CLIENT_SECRET
+<span class="c"># infra</span>
+TOKEN_VAULT_KMS_KEY   OBJECT_STORE_BUCKET   CDN_BASE_URL   SESSION_SIGNING_KEY</pre>
+  <div class="callout warn">
+    <div class="eyebrow" style="margin-bottom:4px;">Non-negotiables</div>
+    <p>Secrets only in the backend env. Tokens encrypted at rest (KMS), never logged. All redirect URIs
+    allow-listed. Honor each platform's data-retention &amp; deletion rules for stored metrics.</p>
+  </div>
+
+  <h2>§12 · Suggested rollout</h2>
+  <ol>
+    <li><strong>Phase 0</strong> — stand up the API + session auth; proxy Claude &amp; Veo (client behavior unchanged, keys moved server-side).</li>
+    <li><strong>Phase 1</strong> — OAuth + Connections for <em>one</em> platform end-to-end (TikTok). Start app review for TikTok + Instagram in parallel.</li>
+    <li><strong>Phase 2</strong> — publish pipeline + scheduler for the approved platform; wire the Publishing screen to real <code>/status</code>.</li>
+    <li><strong>Phase 3</strong> — remaining platforms as reviews clear; insights ingestion → real Insights screen.</li>
+  </ol>
+
+  <div class="callout">
+    <p style="margin:0;"><strong>Net:</strong> the client is production-shaped already — its enums, screens,
+    and the Veo manifest are the integration contract. The work is a backend that speaks them. Build the
+    API, keep the front end; swap mocks for endpoints one phase at a time.</p>
+  </div>
+
+  <div class="foot"><span>BrandReel · Backend Integration Spec</span><span>Confidential · Page 5</span></div>
+</section>
+
+</div>
+</body>
+</html>

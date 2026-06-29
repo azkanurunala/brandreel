@@ -1,0 +1,19 @@
+{
+  "name": "BrandReel",
+  "short_name": "BrandReel",
+  "description": "5-minute input → multi-platform UGC. Generate, format, and auto-post short-form video everywhere.",
+  "id": "/brandreel",
+  "start_url": "./BrandReel%20-%20Mobile%20Prototype.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0E0F15",
+  "theme_color": "#6A5AF0",
+  "categories": ["productivity", "business", "social"],
+  "icons": [
+    { "src": "assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/pwa/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

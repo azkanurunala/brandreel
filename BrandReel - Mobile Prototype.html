@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BrandReel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#6A5AF0" />
+<meta name="description" content="BrandReel — 5-minute input → multi-platform UGC" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="assets/pwa/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BrandReel" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" />
+<style>
+  html, body { margin: 0; padding: 0; min-height: 100vh; min-height: 100dvh; background: #161019; }
+  body { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; overscroll-behavior: none; }
+  #root { width: 100%; min-height: 100vh; min-height: 100dvh; }
+
+  /* Route transitions */
+  @keyframes protoSlideInRight  { from { transform: translateX(100%); opacity: 0.8; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes protoSlideOutLeft  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-30%); opacity: 0; } }
+  @keyframes protoSlideInLeft   { from { transform: translateX(-30%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes protoSlideOutRight { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0.8; } }
+  @keyframes protoFadeIn        { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes protoFadeOut       { from { opacity: 1; } to { opacity: 0; } }
+
+  .proto-screen { will-change: transform, opacity; }
+  /* Incoming screens render at their visible end-state — never gate visibility
+     on the animation timeline (preview/print/export can freeze it at frame 0,
+     which would trap content at opacity:0 / off-screen). Motion comes from the
+     OUTGOING screen animating away, which can never hide live content. */
+  .proto-in-push, .proto-in-pop, .proto-in-replace, .proto-in-tab,
+  .proto-in-reset, .proto-in-init { animation: none; opacity: 1; transform: none; }
+  .proto-out-push   { animation: protoSlideOutLeft  300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .proto-out-pop    { animation: protoSlideOutRight 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .proto-out-replace, .proto-out-tab, .proto-out-reset { animation: protoFadeOut 200ms ease both; }
+
+  @keyframes protoSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes protoBlip { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
+  @keyframes protoToastIn { from { transform: translateY(-110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+    <rect width="400" height="400" fill="#161019"/>
+    <rect x="120" y="80" width="160" height="240" rx="28" fill="none" stroke="#8A6CF6" stroke-width="6"/>
+    <circle cx="200" cy="200" r="46" fill="#8A6CF6"/>
+    <path d="M186 178 L186 222 L224 200 Z" fill="#161019"/>
+  </svg>
+</template>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Device frames + tweaks panel -->
+<script type="text/babel" src="assets/ios-frame.jsx?v=3"></script>
+<script type="text/babel" src="assets/android-frame.jsx?v=3"></script>
+<script type="text/babel" src="assets/ipad-frame.jsx?v=3"></script>
+<script type="text/babel" src="assets/tweaks-panel.jsx?v=3"></script>
+
+<!-- BrandReel system -->
+<script type="text/babel" src="assets/br-theme.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-shell.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-personas.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-data.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-ai.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-video.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-veo-manifest.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-oauth.jsx?v=3"></script>
+
+<!-- Screens -->
+<script type="text/babel" src="assets/br-screens-home.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-screens-onboard.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-screens-campaign.jsx?v=5"></script>
+<script type="text/babel" src="assets/br-screens-insights.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-screens-schedule.jsx?v=5"></script>
+<script type="text/babel" src="assets/br-screens-setup.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-economics.jsx?v=3"></script>
+
+<!-- App + mount -->
+<script type="text/babel" src="assets/br-responsive.jsx?v=3"></script>
+<script type="text/babel" src="assets/br-app.jsx?v=5"></script>
+
+<script>
+  // PWA service worker — installability + offline shell. Fails quietly in sandboxes.
+  if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+</script>
+
+</body>
+</html>
