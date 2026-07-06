@@ -1,0 +1,286 @@
+// ============================================================
+//  BrandReel — Prisma Schema (Database)
+//  Stack: Prisma + Neon (PostgreSQL)
+// ------------------------------------------------------------
+//  CARA EKSEKUSI (di folder backend):
+//    1. npm install prisma @prisma/client
+//    2. taruh file ini di  prisma/schema.prisma
+//    3. isi DATABASE_URL & DIRECT_URL di .env  (lihat Bab 15)
+//    4. npx prisma migrate dev --name init      # buat tabel di Neon
+//    5. npx prisma generate                     # buat client TypeScript
+//    (produksi/Render:  npx prisma migrate deploy)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // koneksi pooled (aplikasi)
+  directUrl = env("DIRECT_URL")     // koneksi langsung (migrasi) — Neon
+}
+
+// ============================================================
+//  ENUM  (daftar nilai tetap — samakan dengan enum di prototype)
+// ============================================================
+
+enum Platform {
+  tiktok
+  instagram
+  youtube
+  linkedin
+  x
+  facebook
+}
+
+enum UserRole {
+  owner       // pemilik akun / admin penuh
+  editor      // boleh membuat & posting
+  viewer      // hanya lihat (RBAC — Bab 07)
+}
+
+enum PlanTier {
+  free
+  pro
+  business
+}
+
+enum ConnectionStatus {
+  active
+  expiring    // token hampir kedaluwarsa (Bab 04)
+  expired
+  revoked
+}
+
+enum CampaignStatus {
+  draft
+  generating  // AI sedang membuat hook/caption
+  rendering    // Veo sedang membuat video
+  ready
+  publishing
+  completed
+  archived
+}
+
+enum RenderProvider {
+  veo
+  canvas      // cadangan instan (fallback)
+}
+
+enum RenderState {
+  queued
+  processing
+  ready
+  failed
+}
+
+enum PostState {
+  queued
+  posted
+  retry
+  failed
+}
+
+// ============================================================
+//  MODEL
+// ============================================================
+
+// --- Pengguna aplikasi BrandReel ---
+model Account {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(owner)
+  plan      PlanTier @default(free)
+  postQuota Int      @default(30)      // jatah posting per periode
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions    Session[]
+  connections Connection[]
+  brandKits   BrandKit[]
+  campaigns   Campaign[]
+
+  @@map("accounts")
+}
+
+// --- Sesi login (first-party) ---
+model Session {
+  id        String   @id @default(cuid())
+  accountId String
+  token     String   @unique              // token sesi (di-hash)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("sessions")
+}
+
+// --- Akun sosial media yang tersambung (hasil OAuth — Bab 04) ---
+model Connection {
+  id           String           @id @default(cuid())
+  accountId    String
+  platform     Platform
+  remoteUserId String                              // ID pengguna di platform
+  handle       String?                             // @username (untuk tampilan)
+  tokenRef     String                              // PETUNJUK ke brankas — BUKAN token mentah (Bab 08)
+  scopes       String[]                            // izin yang diberikan
+  status       ConnectionStatus @default(active)
+  expiresAt    DateTime?                           // kapan token kedaluwarsa
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  posts   Post[]
+
+  @@unique([accountId, platform, remoteUserId])    // cegah koneksi ganda
+  @@index([accountId])
+  @@map("connections")
+}
+
+// --- Identitas merek (bahan prompt AI — Bab 03) ---
+model BrandKit {
+  id        String   @id @default(cuid())
+  accountId String
+  name      String
+  voice     String?                                // gaya bahasa
+  logoUrl   String?
+  colors    String[]                               // daftar hex warna
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@index([accountId])
+  @@map("brand_kits")
+}
+
+// --- Kampanye ---
+model Campaign {
+  id         String         @id @default(cuid())
+  accountId  String
+  brandKitId String?
+  product    String
+  description String?
+  platforms  Platform[]                            // platform tujuan
+  status     CampaignStatus @default(draft)
+  topHook    String?                               // hook terbaik (dari insights)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  brandKit BrandKit? @relation(fields: [brandKitId], references: [id])
+  hooks    Hook[]
+  renders  Render[]
+  posts    Post[]
+
+  @@index([accountId])
+  @@map("campaigns")
+}
+
+// --- Hook/angle naskah (hasil Claude — Bab 03) ---
+model Hook {
+  id         String   @id @default(cuid())
+  campaignId String
+  label      String                                 // mis. "h1", "h2" (samakan prototype)
+  angle      String?                                // jenis angle
+  script     String                                 // naskah hook
+  caption    String?                                // caption default
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  renders  Render[]
+  posts    Post[]
+
+  @@index([campaignId])
+  @@map("hooks")
+}
+
+// --- Video hasil render (Veo/canvas — Bab 03) ---
+model Render {
+  id         String         @id @default(cuid())
+  campaignId String
+  hookId     String?
+  ratio      String                                 // "9:16" | "1:1" | "16:9"
+  provider   RenderProvider @default(veo)
+  state      RenderState    @default(queued)
+  storageUrl String?                                // link file di gudang (Bab 03)
+  durationS  Int?
+  error      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  hook     Hook?    @relation(fields: [hookId], references: [id])
+  posts    Post[]
+
+  @@index([campaignId])
+  @@map("renders")
+}
+
+// --- Postingan ke platform (Bab 05) ---
+model Post {
+  id           String    @id @default(cuid())
+  campaignId   String
+  connectionId String
+  hookId       String?
+  renderId     String?
+  platform     Platform
+  caption      String?
+  state        PostState @default(queued)
+  scheduledAt  DateTime?                            // jadwal posting (stagger)
+  postedAt     DateTime?
+  remoteId     String?                              // ID video di platform
+  permalink    String?                              // link publik hasil
+  attempts     Int       @default(0)                // untuk retry/backoff
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  campaign   Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id])
+  hook       Hook?      @relation(fields: [hookId], references: [id])
+  render     Render?    @relation(fields: [renderId], references: [id])
+  snapshots  InsightSnapshot[]
+
+  @@index([campaignId])
+  @@index([connectionId])
+  @@index([state])
+  @@map("posts")
+}
+
+// --- Foto statistik berkala (Bab 06) ---
+model InsightSnapshot {
+  id         String   @id @default(cuid())
+  postId     String
+  capturedAt DateTime @default(now())
+  views      Int      @default(0)
+  likes      Int      @default(0)
+  comments   Int      @default(0)
+  shares     Int      @default(0)
+  reach      Int      @default(0)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([capturedAt])
+  @@map("insight_snapshots")
+}
+
+// --- Antrean/riwayat job (opsional; BullMQ pegang antrean nyata) ---
+model JobRun {
+  id         String   @id @default(cuid())
+  kind       String                                 // "publish" | "insights" | "refreshToken"
+  refId      String?                                // id campaign/post terkait
+  status     String   @default("queued")            // queued|running|done|failed
+  detail     String?
+  createdAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  @@index([kind])
+  @@map("job_runs")
+}

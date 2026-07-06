@@ -50,12 +50,12 @@ Selama ini backend berjalan di `http://localhost:3000` — hanya bisa diakses da
 
 | Layanan | Cocok untuk | Dokumentasi |
 |---|---|---|
-| **Render** | Pemula; gratis untuk mulai, mudah | <https://render.com/docs> |
-| **Railway** | Pemula; setup cepat | <https://docs.railway.app/> |
-| **Vercel** | Bagus untuk frontend & fungsi kecil | <https://vercel.com/docs> |
+| **Render** ✅ | **Pilihan final** — web service + worker + cron dalam satu tempat | <https://render.com/docs> |
+| **Railway** | Alternatif; setup cepat | <https://docs.railway.app/> |
+| **Vercel** | Cocok frontend/serverless (kurang pas untuk worker persisten) | <https://vercel.com/docs> |
 | **Fly.io** | Lebih fleksibel, sedikit teknis | <https://fly.io/docs/> |
 
-> Untuk backend Node.js + database, **Render** atau **Railway** paling ramah pemula.
+> **Stack final (keputusan A): deploy ke Render.** Backend butuh **worker persisten + cron** (pipeline posting & insights) yang tidak pas di serverless — Render menyediakannya. Database tetap **Neon** (terpisah dari Render). Buat 3 komponen di Render: **Web Service** (API), **Background Worker** (BullMQ), dan **Cron Job** (insights/refresh token).
 
 ---
 
@@ -69,7 +69,7 @@ Selama ini backend berjalan di `http://localhost:3000` — hanya bisa diakses da
    ```
    (Buat repositori di <https://github.com/> lalu ikuti instruksi "push existing repository".)
 
-2. **Hubungkan layanan deploy ke GitHub.** Di Render/Railway, klik "New → Web Service", pilih repositori-mu.
+2. **Hubungkan Render ke GitHub.** Di Render, klik "New → Web Service", pilih repositori-mu. (Database Neon dibuat terpisah di dashboard Neon, lalu salin connection string ke env.)
 
 3. **Atur perintah:**
    - Build command: `npm install`
@@ -93,7 +93,7 @@ Selama ini backend berjalan di `http://localhost:3000` — hanya bisa diakses da
 | Hal | Alat / cara |
 |---|---|
 | **Error & crash** | Sentry (<https://docs.sentry.io/>) atau log bawaan layanan deploy |
-| **Database backup** | Aktifkan backup otomatis (Supabase/Render punya fitur ini) |
+| **Database backup** | Aktifkan backup otomatis (Neon punya point-in-time restore) |
 | **Token kedaluwarsa** | Pastikan penjadwal refresh (Bab 04) berjalan |
 | **Rate limit** | Pantau error 429; sesuaikan jeda (Bab 05) |
 | **Biaya** | Pantau pemakaian AI (Claude/Veo) & server |
@@ -103,7 +103,7 @@ Selama ini backend berjalan di `http://localhost:3000` — hanya bisa diakses da
 ## Checklist Bab 09
 
 - [ ] Paham 4 fase rollout & urutannya
-- [ ] Memilih layanan deploy (Render/Railway)
+- [ ] Deploy ke **Render** (Web Service + Worker + Cron) + DB **Neon**
 - [ ] Kode tersimpan di GitHub (tanpa `.env`!)
 - [ ] Environment variables dimasukkan di dashboard, bukan di kode
 - [ ] Redirect URI versi online didaftarkan di tiap platform

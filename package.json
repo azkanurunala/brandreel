@@ -1,0 +1,18 @@
+{
+  "name": "brandreel",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "api": "npm run dev --workspace brandreel-api",
+    "api:worker": "npm run dev:worker --workspace brandreel-api",
+    "api:build": "npm run build --workspace brandreel-api",
+    "db:migrate": "npm run db:migrate --workspace brandreel-api",
+    "db:seed": "npm run db:seed --workspace brandreel-api",
+    "db:studio": "npm run db:studio --workspace brandreel-api",
+    "mobile": "npm run start --workspace brandreel-mobile",
+    "mobile:web": "npm run web --workspace brandreel-mobile"
+  }
+}

@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# env — JANGAN pernah commit kunci/secret
+.env
+.env.*
+!.env.example
+
+# build output
+apps/api/dist/
+apps/mobile/dist/
+apps/mobile/.expo/
+apps/mobile/web-build/
+
+# native build (Expo prebuild)
+apps/mobile/ios/
+apps/mobile/android/
+
+# prisma
+apps/api/prisma/migrations/**/migration_lock.toml.bak
+
+# logs & OS
+*.log
+.DS_Store
+Thumbs.db

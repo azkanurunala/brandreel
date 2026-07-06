@@ -4,6 +4,8 @@
 >
 > Tidak apa-apa kalau belum paham tiap baris kode. Ikuti dulu, pemahaman datang belakangan.
 
+> 🧩 **Catatan stack (keputusan A):** produksi nanti memakai **TypeScript + Express + Prisma + Neon**, deploy ke **Render**. Bab ini sengaja memakai JavaScript polos dulu supaya konsepnya jelas untuk pemula. Saat handoff ke Claude Code ([Bab 14](./14-handoff-claude-code.md)), semua ditulis dalam TypeScript + Prisma. Contoh JS di sini tetap sah sebagai fondasi pemahaman.
+
 [← Bab 01: Persiapan](./01-persiapan-alat-dan-akun.md) · [Daftar isi](./README.md) · [Bab 03: Kunci AI →](./03-kunci-ai-claude-veo.md)
 
 ---
@@ -171,6 +173,8 @@ git commit -m "Backend pertama: server halo"
 ✅ Kode tersimpan rapi dengan Git.
 
 Di bab berikutnya, server ini akan kita beri tugas pertama yang nyata: menjadi perantara aman untuk AI.
+
+> 🧩 **Ke depan (stack A):** proyek nyata memakai struktur **TypeScript** (`src/` dengan file `.ts`), **Prisma** untuk database ([Bab 16](./16-skema-database.md)), dan variabel di `.env` ([Bab 15](./15-referensi-env.md)). Pola berpikirnya sama persis dengan yang baru kamu pelajari — hanya berbahasa TypeScript.
 
 ---
 

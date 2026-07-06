@@ -140,11 +140,11 @@ Database menyimpan data secara permanen & rapi. Berikut "tabel-tabel" utamanya:
 
 ## Bagian 4 — Alat database ramah pemula
 
-- **PostgreSQL** — database andal & gratis. <https://www.postgresql.org/docs/>
+- **Neon** — **PostgreSQL cloud** yang cepat & punya free tier bagus (pilihan stack final). <https://neon.tech/docs>
 - **Prisma** — membuat pengelolaan database jauh lebih mudah (kamu menulis model, ia urus detailnya). <https://www.prisma.io/docs>
-- **Supabase** — PostgreSQL siap pakai di cloud + tampilan admin. <https://supabase.com/docs>
+- **PostgreSQL** — mesin database di baliknya. <https://www.postgresql.org/docs/>
 
-> 💡 Untuk pemula, kombinasi **Supabase + Prisma** sangat memudahkan: database online tanpa setup rumit, dan model data ditulis dalam bahasa yang mudah dibaca.
+> 💡 **Stack final (keputusan A): Neon + Prisma.** Skema database lengkap siap-eksekusi ada di [Bab 16](./16-skema-database.md) — tinggal `prisma migrate`.
 
 ---
 
@@ -154,7 +154,7 @@ Database menyimpan data secara permanen & rapi. Berikut "tabel-tabel" utamanya:
 - [ ] Paham bentuk request/response `publish` & `status`
 - [ ] Model data dibuat (Account, Connection, BrandKit, Campaign, Render, Post, InsightSnapshot)
 - [ ] Token disimpan sebagai `tokenRef`, bukan mentah
-- [ ] Memilih alat database (mis. Supabase + Prisma)
+- [ ] Alat database: **Neon + Prisma** (skema siap di Bab 16)
 
 ---
 

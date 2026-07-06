@@ -1,0 +1,143 @@
+# ============================================================
+#  BrandReel — Render Blueprint (deploy sekali-klik)
+#  Taruh file ini bernama "render.yaml" di ROOT repositori.
+#  Render akan membaca ini saat kamu pilih "New > Blueprint".
+# ------------------------------------------------------------
+#  CATATAN:
+#  - Database TIDAK di sini. Pakai NEON (buat terpisah di neon.tech),
+#    lalu isi DATABASE_URL & DIRECT_URL sebagai env (lihat di bawah).
+#  - Redis dibuat sebagai Key Value service di Render.
+#  - Semua "sync: false" artinya nilainya kamu isi manual di dashboard
+#    (rahasia — jangan ditaruh di file ini). Lihat Bab 15.
+#  Docs: https://render.com/docs/blueprint-spec
+# ============================================================
+
+services:
+  # ---------- 1. API (Web Service) ----------
+  - type: web
+    name: brandreel-api
+    runtime: node
+    plan: free
+    rootDir: apps/api
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # --- Database (Neon) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # --- Redis (dihubungkan otomatis dari service di bawah) ---
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: brandreel-redis
+          property: connectionString
+      # --- Keamanan ---
+      - key: SESSION_SIGNING_KEY
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      # --- Alamat aplikasi ---
+      - key: APP_BASE_URL
+        sync: false
+      - key: WEB_APP_URL
+        sync: false
+      # --- AI ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # --- Storage ---
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_REGION
+        sync: false
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: CDN_BASE_URL
+        sync: false
+      # --- OAuth platform (isi yang sudah didaftarkan) ---
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: LINKEDIN_CLIENT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_SECRET
+        sync: false
+      - key: X_CLIENT_ID
+        sync: false
+      - key: X_CLIENT_SECRET
+        sync: false
+
+  # ---------- 2. Worker (Background Worker) ----------
+  # Menjalankan antrean BullMQ: publish pipeline & pengiriman video.
+  - type: worker
+    name: brandreel-worker
+    runtime: node
+    plan: free
+    rootDir: apps/api
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: brandreel-redis
+          property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      # (tambahkan env platform/storage yang worker butuhkan, sama seperti API)
+
+  # ---------- 3. Cron Job (Insights + refresh token) ----------
+  # Berjalan berkala; logika cadence detail ada di dalam kode (Bab 06).
+  - type: cron
+    name: brandreel-insights
+    runtime: node
+    plan: free
+    rootDir: apps/api
+    schedule: "*/15 * * * *"        # tiap 15 menit
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run job:insights
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: brandreel-redis
+          property: connectionString
+
+  # ---------- 4. Redis (Key Value) ----------
+  - type: keyvalue
+    name: brandreel-redis
+    plan: free
+    ipAllowList: []                 # kosong = hanya bisa diakses service internal Render

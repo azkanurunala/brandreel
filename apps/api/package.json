@@ -1,0 +1,52 @@
+{
+  "//": "BrandReel — contoh package.json BACKEND (apps/api). Sesuaikan versi saat install.",
+  "name": "brandreel-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "//dev": "Jalankan server lokal dengan auto-reload",
+    "dev": "tsx watch src/index.ts",
+    "//worker-dev": "Jalankan worker antrean lokal",
+    "dev:worker": "tsx watch src/worker.ts",
+    "//build": "Kompilasi TypeScript ke folder dist/",
+    "build": "tsc -p tsconfig.json",
+    "//start": "Jalankan server hasil build (produksi)",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
+    "//job-insights": "Dijalankan oleh Cron Render (Bab 06)",
+    "job:insights": "node dist/jobs/insights.js",
+    "//prisma": "Perintah database (Bab 16)",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@google/generative-ai": "^0.21.0",
+    "@prisma/client": "^5.20.0",
+    "bullmq": "^5.12.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ioredis": "5.10.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "prisma": "^5.20.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

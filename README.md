@@ -1,22 +1,60 @@
-# CODING AGENTS: READ THIS FIRST
+# BrandReel
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+Aplikasi pembuat video promosi AI → posting otomatis ke banyak sosial media → statistik gabungan.
+Satu source code untuk **iOS, Android, iPad, dan Web** (desktop/mobile/tablet).
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+## Struktur
 
-## What you should do — IMPORTANT
+```
+apps/
+  api/      → Backend: Node + TypeScript + Express + Prisma (Neon) + BullMQ (Redis)
+  mobile/   → Frontend: Expo (React Native + react-native-web) + Expo Router
+render.yaml → Blueprint deploy Render (API + worker + cron + Redis)
+Panduan Backend BrandReel/ → Spesifikasi lengkap (Bab 00–18)
+```
 
-**Find the primary design file under `brandreel/project/` and read it top to bottom.** Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## Menjalankan lokal
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+Prasyarat: Node.js 20+ dan npm.
 
-## About the design files
+```bash
+# 1. Install semua dependency (sekali saja, dari root)
+npm install
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+# 2. Isi environment
+#    - apps/api/.env      (salin dari apps/api/.env.example, isi DATABASE_URL Neon)
+#    - apps/mobile/.env   (salin dari apps/mobile/.env.example)
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+# 3. Siapkan database (setelah DATABASE_URL Neon terisi)
+npm run db:migrate   # buat tabel
+npm run db:seed      # isi data contoh
 
-## Bundle contents
+# 4. Jalankan backend
+npm run api          # API di http://localhost:3000  (cek: /health)
 
-- `brandreel/README.md` — this file
-- `brandreel/project/` — the `BrandReel` project files (HTML prototypes, assets, components)
+# 5. Jalankan frontend (terminal terpisah)
+npm run mobile       # Expo — tekan: w=web, a=Android, i=iOS
+```
+
+Perintah lain: `npm run api:worker` (worker antrean), `npm run db:studio` (lihat isi DB), `npm run mobile:web` (langsung web).
+
+## Deploy
+
+1. **Database:** buat project di [neon.tech](https://neon.tech), salin connection string (pooled → `DATABASE_URL`, direct → `DIRECT_URL`).
+2. **Backend:** di [Render](https://render.com) pilih **New > Blueprint**, arahkan ke repo ini — `render.yaml` membuat API + worker + cron + Redis. Isi env yang bertanda `sync: false` di dashboard.
+3. **Frontend web:** `npx expo export --platform web` lalu host folder `dist/` (atau pakai EAS Hosting). Isi `EXPO_PUBLIC_API_URL` ke alamat Render.
+4. **iOS/Android:** build dengan [EAS Build](https://docs.expo.dev/build/introduction/).
+
+Daftar lengkap kunci yang harus diisi: `Panduan Backend BrandReel/15-referensi-env.md`.
+
+---
+
+## Catatan handoff desain
+
+Repo ini berawal dari bundle handoff Claude Design. Prototype visual (sumber kebenaran UI):
+
+- `BrandReel - Mobile Prototype.html` + `assets/*.jsx` — prototype interaktif (buka langsung di browser).
+- `BrandReel - Backend Integration Spec.html` — spec ringkas.
+- `.preview/`, `screenshots/` — referensi visual.
+
+Implementasi harus meniru tampilan, alur, enum, dan status prototype **persis** (lihat `CLAUDE.md`).

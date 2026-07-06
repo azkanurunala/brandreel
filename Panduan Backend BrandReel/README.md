@@ -27,6 +27,29 @@
 | 07 | [API & Database](./07-api-endpoint-dan-database.md) | Daftar alamat API + cara menyimpan data | ⭐⭐ |
 | 08 | [Keamanan](./08-keamanan.md) | Aturan yang TIDAK boleh dilanggar | ⭐ wajib |
 | 09 | [Rollout & Deploy](./09-rollout-dan-deploy.md) | Urutan pengerjaan + menaruh backend online | ⭐⭐ |
+| 10 | [Frontend Lintas Platform](./10-frontend-react-native-lintas-platform.md) | Konsep 1 source code untuk semua (Expo) | ⭐⭐ |
+| 11 | [Setup Expo](./11-setup-expo.md) | Bikin app jalan di iOS/Android/Web | ⭐⭐ |
+| 12 | [Responsive & Adaptif](./12-responsive-adaptif.md) | 4 tampilan: mobile/tablet portrait/landscape/desktop | ⭐⭐⭐ |
+| 13 | [Sambung Frontend↔Backend](./13-sambung-frontend-backend.md) | Menghubungkan Expo ke API | ⭐⭐ |
+| 14 | [Handoff ke Claude Code](./14-handoff-claude-code.md) | Brief siap-tempel agar app dibangun penuh | ⭐ wajib |
+| 15 | [Referensi `.env`](./15-referensi-env.md) | Semua placeholder kunci + file contoh siap-salin | ⭐ wajib |
+| 16 | [Skema Database](./16-skema-database.md) | Prisma schema siap eksekusi + cara migrasi | ⭐⭐ |
+| 17 | [Deploy Sekali-Klik](./17-deploy-render-blueprint.md) | Render blueprint + package.json siap-pakai | ⭐⭐ |
+| 18 | [Starter Scaffold](./18-starter-scaffold.md) | Kode awal backend siap-jalan + inti mobile | ⭐⭐ |
+
+**Berkas siap-pakai:** [`contoh-env/`](./contoh-env/) (`.env.example`) · [`skema-database/`](./skema-database/) (`schema.prisma` + `seed.ts`) · [`berkas-siap-pakai/`](./berkas-siap-pakai/) (`render.yaml` + config) · [`starter-backend/`](./starter-backend/) (API siap-jalan) · [`starter-mobile/`](./starter-mobile/) (inti Expo)
+
+---
+
+## Stack teknologi (keputusan final)
+
+| Lapisan | Teknologi |
+|---|---|
+| **Frontend** | Expo (React Native + Web) + TypeScript — 1 source code untuk iOS/Android/iPad/Web |
+| **Backend** | Node + TypeScript (Express) — bahasa sama dengan frontend |
+| **Database** | Neon (PostgreSQL cloud) + Prisma |
+| **Antrean/Cron** | BullMQ + Redis |
+| **Deploy** | Render (web service + worker + cron) |
 
 ---
 
