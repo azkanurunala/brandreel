@@ -1,15 +1,16 @@
 // Layar generating — porting BrGenerating dari prototype br-screens-campaign.jsx.
-// Fase 2: animasi fase bertahap; panggilan AI asli disambungkan di Fase 3
-// (aiTask di bawah tinggal diganti pemanggil backend /campaigns/:id/generate).
+// Fase 3: menunggu panggilan Claude nyata (/campaigns/:id/generate) yang
+// dimulai di create.tsx — animasi fase tetap berjalan sampai keduanya selesai.
 
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr } from "@/context/BrContext";
 import { BrAppShell, PrimaryButton } from "@/components/br/AppChrome";
 import { FONT } from "@/components/br/fonts";
+import { getPendingCampaign } from "@/data/pendingCampaign";
 
 const RADIUS = 58;
 const CIRC = 2 * Math.PI * RADIUS;
@@ -31,10 +32,13 @@ export default function GeneratingScreen() {
   const [pct, setPct] = useState(0);
   const aiSettledRef = useRef(false);
 
-  // Fase 3: ganti dengan panggilan backend nyata (Claude via /generate).
+  // Tunggu promise generate nyata yang dimulai di create.tsx (Claude via /generate).
   useEffect(() => {
-    const id = setTimeout(() => { aiSettledRef.current = true; }, 800);
-    return () => clearTimeout(id);
+    let alive = true;
+    const pending = getPendingCampaign();
+    const promise = pending?.generatePromise ?? Promise.resolve(null);
+    promise.finally(() => { if (alive) aiSettledRef.current = true; });
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {

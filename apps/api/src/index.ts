@@ -8,6 +8,8 @@ import { generateRouter } from "./routes/generate.js";
 import { campaignsRouter } from "./routes/campaigns.js";
 import { connectionsRouter } from "./routes/connections.js";
 import { insightsRouter } from "./routes/insights.js";
+import { rendersRouter } from "./routes/renders.js";
+import { accountsRouter } from "./routes/accounts.js";
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.use(generateRouter);
 app.use(campaignsRouter);
 app.use(connectionsRouter);
 app.use(insightsRouter);
+app.use(rendersRouter);
+app.use(accountsRouter);
 
 // --- 404 & error handler sederhana ---
 app.use((req, res) => res.status(404).json({ error: "Tidak ditemukan", path: req.path }));

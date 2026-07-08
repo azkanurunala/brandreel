@@ -1,5 +1,6 @@
 // Buat kampanye — porting BrCreate dari prototype assets/br-screens-campaign.jsx.
-// Fase 2: input produk/logo/voice/platform; hasil generate masih simulasi.
+// Fase 3: submit membuat Campaign asli di backend lalu memanggil
+// /campaigns/:id/generate (Claude) — promise-nya ditunggu di layar generating.
 
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -12,7 +13,8 @@ import { BrAppShell, BrAppHeader, FloatingActionBar, PrimaryButton } from "@/com
 import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
-import { setPendingCampaign } from "@/data/pendingCampaign";
+import { setPendingCampaign, setPendingBackend, type GenerateResult } from "@/data/pendingCampaign";
+import { apiGet, apiPost } from "@/lib/api";
 
 function Label({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -40,7 +42,7 @@ export default function CreateScreen() {
     return p ? p.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase().slice(0, 2) : "··";
   }, [product]);
 
-  function generate() {
+  async function generate() {
     if (!ready) return;
     const productName = product.trim();
     setPendingCampaign({
@@ -54,6 +56,36 @@ export default function CreateScreen() {
       },
       input: { product: productName, desc: desc.trim(), voice, platforms: plats, lang },
     });
+
+    // Mulai panggilan backend nyata; promise ditunggu di layar generating.
+    let createdId = "pending";
+    async function runGenerate(): Promise<GenerateResult | null> {
+      try {
+        const account = await apiGet("/accounts/demo");
+        const campaign = await apiPost("/campaigns", {
+          accountId: account.id,
+          product: productName,
+          description: desc.trim() || undefined,
+          platforms: plats,
+        });
+        createdId = campaign.id;
+        const gen = await apiPost(`/campaigns/${campaign.id}/generate`, { lang });
+        const hooks = Object.fromEntries(
+          (gen.hooks as { id: string; label: string; script: string; caption: string }[]).map((h) => [
+            h.label,
+            { id: h.id, script: h.script, caption: h.caption },
+          ])
+        ) as GenerateResult["hooks"];
+        return { hooks, hashtags: gen.hashtags as string[] };
+      } catch (e) {
+        console.warn("Generate backend gagal, pakai fallback lokal:", e);
+        return null;
+      }
+    }
+    const promise = runGenerate();
+    setPendingBackend(createdId, promise);
+    promise.then(() => setPendingBackend(createdId, promise));
+
     router.push("/generating");
   }
 

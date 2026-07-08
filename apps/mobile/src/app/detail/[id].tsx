@@ -1,8 +1,10 @@
 // Detail kampanye — porting BrDetail dari prototype br-screens-campaign.jsx.
-// Fase 2: pratinjau video = kartu gradasi (render video asli disambung Fase 3);
-// caption memakai brBuildCaption (adaptasi AI asli menyusul Fase 3).
+// Fase 3: bila kampanye baru dibuat via backend (Fase 3), skrip hook & caption
+// datang dari Claude nyata (/campaigns/:id/generate + /adapt-caption).
+// Pratinjau video tetap kartu gradasi — render Veo asli disambung di layar
+// terpisah begitu worker/render selesai (lihat apps/api/src/worker.ts).
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,7 +13,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useBr, brStatusMeta } from "@/context/BrContext";
 import { BR_HOOKS, BR_HOOK_ORDER, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
 import { BR_CAMPAIGNS, brBuildCaption, brPreflight, type Campaign } from "@/data/campaigns";
-import { getPendingCampaign } from "@/data/pendingCampaign";
+import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
+import { apiPost } from "@/lib/api";
 import { BrAppShell, BrAppHeader, FloatingActionBar, GhostButton, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
@@ -49,7 +52,31 @@ export default function DetailScreen() {
 
   const platMeta = BR_PLATFORMS[plat];
   const hk = BR_HOOKS[hook];
-  const cap = useMemo(() => brBuildCaption(c, hook, plat, lang), [c, hook, plat, lang]);
+
+  // Fase 3: hook AI nyata bila kampanye ini baru saja dibuat via backend.
+  const pending = id === "__new" ? getPendingCampaign() : null;
+  const aiResult: GenerateResult | null = pending?.result ?? null;
+  const hasAI = !!aiResult;
+  const aiHook = aiResult?.hooks[hook];
+  const backendId = pending?.backendId && pending.backendId !== "pending" ? pending.backendId : null;
+
+  const fallbackCap = useMemo(() => brBuildCaption(c, hook, plat, lang), [c, hook, plat, lang]);
+  const [capCache, setCapCache] = useState<Record<string, { text: string; len: number; max: number }>>({});
+  const cacheKey = `${hook}-${plat}`;
+  const cachedCap = capCache[cacheKey];
+  const capLoading = hasAI && !!backendId && !!aiHook && !cachedCap;
+  const cap = cachedCap ?? fallbackCap;
+
+  useEffect(() => {
+    if (!hasAI || !backendId || !aiHook || capCache[cacheKey]) return;
+    let alive = true;
+    apiPost(`/campaigns/${backendId}/adapt-caption`, { hookId: aiHook.id, platform: plat, lang })
+      .then((res) => { if (alive) setCapCache((m) => ({ ...m, [cacheKey]: res })); })
+      .catch(() => { if (alive) setCapCache((m) => ({ ...m, [cacheKey]: fallbackCap })); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey, hasAI, backendId]);
+
   const preflight = brPreflight(c, lang);
   const allClear = preflight.every((r) => r.ok);
   const sm = brStatusMeta(c.status, theme, t);
@@ -163,15 +190,37 @@ export default function DetailScreen() {
           </View>
         </View>
 
+        {/* Skrip hook AI (hanya bila hasil Claude nyata tersedia) */}
+        {hasAI && aiHook?.script && (
+          <>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
+              <Eyebrow color={theme.ink3}>{lang === "en" ? "HOOK SCRIPT" : "SKRIP HOOK"}</Eyebrow>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: hk.color }} />
+                <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: hk.color, letterSpacing: 0.6 }}>CLAUDE</Text>
+              </View>
+            </View>
+            <GlassPanel theme={theme} padding={14} style={{ borderLeftWidth: 3, borderLeftColor: hk.color }}>
+              <Text style={{ fontFamily: FONT.sansSemi, fontSize: 14, color: theme.ink, lineHeight: 21 }}>“{aiHook.script}”</Text>
+            </GlassPanel>
+          </>
+        )}
+
         {/* Caption teradaptasi */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
           <Eyebrow color={theme.ink3}>{lang === "en" ? "ADAPTED CAPTION" : "CAPTION TERADAPTASI"}</Eyebrow>
           <Text style={{ fontFamily: FONT.mono, fontSize: 9.5, color: cap.len > cap.max * 0.92 ? theme.warn : theme.ink3, letterSpacing: 0.4 }}>
-            {cap.len}/{cap.max}
+            {capLoading ? "···" : `${cap.len}/${cap.max}`}
           </Text>
         </View>
         <GlassPanel theme={theme} padding={14}>
-          <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink, lineHeight: 20 }}>{cap.text}</Text>
+          {capLoading ? (
+            <Text style={{ fontFamily: FONT.mono, fontSize: 10, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>
+              {lang === "en" ? `Adapting for ${platMeta.name}…` : `Mengadaptasi untuk ${platMeta.name}…`}
+            </Text>
+          ) : (
+            <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink, lineHeight: 20 }}>{cap.text}</Text>
+          )}
         </GlassPanel>
 
         {/* Pra-kirim */}

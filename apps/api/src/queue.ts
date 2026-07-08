@@ -14,4 +14,7 @@ export const publishQueue = new Queue("publish", { connection });
 // Antrean untuk job statistik (Bab 06).
 export const insightsQueue = new Queue("insights", { connection });
 
-export const QUEUE_NAMES = { publish: "publish", insights: "insights" } as const;
+// Antrean render video Veo (Bab 03).
+export const renderQueue = new Queue("render", { connection });
+
+export const QUEUE_NAMES = { publish: "publish", insights: "insights", render: "render" } as const;

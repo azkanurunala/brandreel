@@ -20,6 +20,14 @@ const schema = z.object({
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-5"),
   GEMINI_API_KEY: z.string().optional(),
   VEO_MODEL: z.string().default("veo3.1-fast"),
+
+  // Storage video (Bab 03/15) — wajib saat render Veo dipakai
+  STORAGE_BUCKET: z.string().optional(),
+  STORAGE_ENDPOINT: z.string().optional(),
+  STORAGE_REGION: z.string().default("auto"),
+  STORAGE_ACCESS_KEY_ID: z.string().optional(),
+  STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
+  CDN_BASE_URL: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);
