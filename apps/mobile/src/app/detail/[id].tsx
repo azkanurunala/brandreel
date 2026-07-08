@@ -263,7 +263,10 @@ export default function DetailScreen() {
         <GhostButton theme={theme} onPress={() => router.push("/schedule")} style={{ paddingHorizontal: 16 }}>
           {t.detail.schedule}
         </GhostButton>
-        <PrimaryButton theme={theme} onPress={() => router.push(`/publishing/${c.id}`)} style={{ flex: 1 }}>
+        <PrimaryButton theme={theme} onPress={() => {
+          if (backendId) apiPost(`/campaigns/${backendId}/publish`, { hookId: aiHook?.id }).catch((e) => console.warn("publish gagal:", e));
+          router.push(`/publishing/${c.id}`);
+        }} style={{ flex: 1 }}>
           {t.detail.postNow} →
         </PrimaryButton>
       </FloatingActionBar>

@@ -1,6 +1,9 @@
 // src/lib/platforms.ts — spesifikasi tiap platform (Bab 05 §2), dipakai
 // server-side untuk pre-flight validate(). Samakan dengan tokens.ts frontend.
-export type PlatformId = "tiktok" | "instagram" | "youtube" | "linkedin" | "twitter" | "facebook";
+// Catatan: enum Prisma `Platform` (schema.prisma) memakai "x", bukan "twitter"
+// — beda dari penamaan frontend (theme/tokens.ts pakai "twitter"). Ikuti
+// Prisma di sini karena file ini dipakai langsung dalam query DB.
+export type PlatformId = "tiktok" | "instagram" | "youtube" | "linkedin" | "x" | "facebook";
 
 export interface PlatformSpec {
   ratio: "9:16" | "1:1" | "16:9";
@@ -15,6 +18,6 @@ export const PLATFORM_SPEC: Record<PlatformId, PlatformSpec> = {
   instagram: { ratio: "9:16", maxDurationS: 90, captionMax: 2200, hashtagMax: 8, staggerMinutes: null },
   youtube: { ratio: "9:16", maxDurationS: 60, captionMax: 100, hashtagMax: 3, staggerMinutes: null },
   linkedin: { ratio: "1:1", maxDurationS: 90, captionMax: 700, hashtagMax: 3, staggerMinutes: null },
-  twitter: { ratio: "16:9", maxDurationS: 140, captionMax: 280, hashtagMax: 2, staggerMinutes: null },
+  x: { ratio: "16:9", maxDurationS: 140, captionMax: 280, hashtagMax: 2, staggerMinutes: null },
   facebook: { ratio: "1:1", maxDurationS: 90, captionMax: 2200, hashtagMax: 4, staggerMinutes: null },
 };

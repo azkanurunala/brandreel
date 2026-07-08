@@ -1,6 +1,7 @@
 // Status publishing per platform — porting BrPublishing dari prototype
-// br-screens-campaign.jsx. Fase 2: animasi queued→posted simulasi;
-// Fase 5 diganti status asli dari backend (/campaigns/:id/status).
+// br-screens-campaign.jsx. Fase 5: bila kampanye ini punya backendId nyata,
+// status di-poll dari /campaigns/:id/status (Post asli, hasil worker.ts);
+// kalau tidak (kampanye demo bawaan tanpa baris DB), pakai simulasi timer.
 
 import React, { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -11,6 +12,7 @@ import { useBr } from "@/context/BrContext";
 import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
 import { BR_CAMPAIGNS, type Campaign, type PlatformPost } from "@/data/campaigns";
 import { getPendingCampaign } from "@/data/pendingCampaign";
+import { apiGet } from "@/lib/api";
 import { BrAppShell, BrAppHeader, GhostButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
@@ -24,6 +26,14 @@ function resolveCampaign(id: string | undefined): Campaign {
   return BR_CAMPAIGNS.find((c) => c.id === id) ?? BR_CAMPAIGNS[0];
 }
 
+function resolveBackendId(id: string | undefined): string | null {
+  if (id === "__new") {
+    const p = getPendingCampaign();
+    return p?.backendId && p.backendId !== "pending" ? p.backendId : null;
+  }
+  return null; // kampanye demo bawaan tak punya baris DB
+}
+
 export default function PublishingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme, lang, t } = useBr();
@@ -31,14 +41,16 @@ export default function PublishingScreen() {
   const insets = useSafeAreaInsets();
 
   const c = resolveCampaign(id);
+  const backendId = resolveBackendId(id);
   const initial: Record<string, PlatformPost> = Object.keys(c.platforms).length
     ? Object.fromEntries(Object.entries(c.platforms).map(([k, v]) => [k, { ...(v as PlatformPost) }]))
     : Object.fromEntries(BR_PLATFORM_ORDER.map((p) => [p, { state: "queued" as const }]));
 
   const [states, setStates] = useState(initial);
 
-  // Simulasi "live": antre → terkirim bertahap (Fase 5: polling status backend).
+  // Kampanye demo tanpa baris DB: simulasi "live" antre → terkirim bertahap.
   useEffect(() => {
+    if (backendId) return;
     const order = Object.keys(states).filter((k) => states[k].state === "queued");
     const timers = order.map((k, i) =>
       setTimeout(() => {
@@ -47,7 +59,32 @@ export default function PublishingScreen() {
     );
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [backendId]);
+
+  // Kampanye nyata: poll status asli dari backend (hasil worker.ts).
+  useEffect(() => {
+    if (!backendId) return;
+    let alive = true;
+    async function poll() {
+      try {
+        const res = await apiGet(`/campaigns/${backendId}/status`);
+        const perPlatform = res.perPlatform as { platform: string; state: string; permalink: string | null }[];
+        if (!alive || !perPlatform.length) return;
+        setStates((prev) => {
+          const next = { ...prev };
+          for (const row of perPlatform) {
+            next[row.platform] = { ...(next[row.platform] ?? {}), state: row.state as PlatformPost["state"] };
+          }
+          return next;
+        });
+      } catch (e) {
+        console.warn("poll status gagal:", e);
+      }
+    }
+    poll();
+    const id2 = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(id2); };
+  }, [backendId]);
 
   const meta: Record<string, { label: string; color: string }> = {
     posted: { label: t.pub.posted, color: theme.pos },
@@ -115,8 +152,9 @@ export default function PublishingScreen() {
           })}
         </View>
 
-        {/* Log error bila ada */}
-        {hasIssue && (
+        {/* Log error bila ada (contoh statis — kampanye demo saja; kampanye
+            nyata tampilkan Post.lastError asli lewat status di atas) */}
+        {hasIssue && !backendId && (
           <>
             <View style={{ paddingTop: 18, paddingHorizontal: 4, paddingBottom: 8 }}>
               <Text style={{ fontFamily: FONT.mono, fontSize: 10, letterSpacing: 2.2, textTransform: "uppercase", color: theme.ink3 }}>
