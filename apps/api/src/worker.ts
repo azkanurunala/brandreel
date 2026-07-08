@@ -5,30 +5,60 @@ import { connection } from "./queue.js";
 import { prisma } from "./db.js";
 import { startVeoRender, waitForVeoRender } from "./lib/veo.js";
 import { uploadVideo } from "./lib/storage.js";
+import { decryptTokenRef } from "./lib/vault.js";
+import { getAdapter, type PlatformId } from "./lib/adapters/index.js";
 
 console.log("👷 BrandReel worker mulai — mendengarkan antrean 'publish' & 'render'");
 
+// Posting nyata via adapter (Bab 05 §1/§3). Retry/backoff diatur saat job
+// ditambahkan (publish.ts): attempts:5, backoff exponential mulai 60d.
+// Status Post disinkronkan tiap percobaan supaya layar Publishing selalu benar.
 const publishWorker = new Worker(
   "publish",
   async (job) => {
     const { postId } = job.data as { postId: string };
-    console.log(`→ Memproses post ${postId} (percobaan ke-${job.attemptsMade + 1})`);
+    const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
-    // TODO (fase publish): panggil adapter platform validate()/publish()
-    // Pola: pre-flight -> publish -> simpan remoteId & permalink -> state "posted".
-    // Di sini kita hanya menandai selesai sebagai kerangka.
-    await prisma.post.update({
+    const post = await prisma.post.findUnique({
       where: { id: postId },
-      data: { state: "posted", postedAt: new Date() },
+      include: { connection: true, render: true },
     });
+    if (!post) throw new Error(`Post ${postId} tidak ditemukan`);
+    if (!post.render?.storageUrl) throw new Error(`Render untuk post ${postId} belum punya storageUrl`);
 
-    return { ok: true };
+    console.log(`→ Memproses post ${postId} (${post.platform}, percobaan ke-${job.attemptsMade + 1})`);
+
+    try {
+      const { access_token } = decryptTokenRef<{ access_token: string }>(post.connection.tokenRef);
+      const adapter = getAdapter(post.platform as PlatformId);
+      const result = await adapter.publish({
+        accessToken: access_token,
+        videoUrl: post.render.storageUrl,
+        caption: post.caption ?? "",
+      });
+
+      await prisma.post.update({
+        where: { id: postId },
+        data: {
+          state: result.state,
+          remoteId: result.remoteId,
+          permalink: result.permalink,
+          postedAt: result.state === "posted" ? new Date() : null,
+          attempts: { increment: 1 },
+          lastError: null,
+        },
+      });
+      return { ok: true };
+    } catch (err: any) {
+      const message = err.message ?? String(err);
+      await prisma.post.update({
+        where: { id: postId },
+        data: { state: isLastAttempt ? "failed" : "retry", attempts: { increment: 1 }, lastError: message },
+      });
+      throw err; // biarkan BullMQ jadwalkan retry berikutnya (kecuali percobaan terakhir)
+    }
   },
-  {
-    connection,
-    // Retry otomatis dengan backoff (Bab 05) diatur saat menambah job ke queue:
-    //   publishQueue.add("post", { postId }, { attempts: 5, backoff: { type: "exponential", delay: 60000 } })
-  }
+  { connection }
 );
 
 // Render video UGC via Veo (Bab 03): mulai operasi -> poll -> unggah -> simpan URL.
