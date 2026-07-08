@@ -21,6 +21,10 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   VEO_MODEL: z.string().default("veo3.1-fast"),
 
+  // OAuth TikTok (Bab 04) — wajib saat fitur connect TikTok dipakai
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
+
   // Storage video (Bab 03/15) — wajib saat render Veo dipakai
   STORAGE_BUCKET: z.string().optional(),
   STORAGE_ENDPOINT: z.string().optional(),

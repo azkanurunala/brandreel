@@ -1,14 +1,16 @@
 // Profil — porting BrProfile dari prototype assets/br-screens-insights.jsx.
-// Fase 2: kartu persona, paket & pemakaian, akun terhubung (status token),
-// tambah channel, workspace, developer, ganti persona, keluar.
-// Sheet paket/brand kit/tim + OAuth sheet menyusul (Fase 2 lanjutan / Fase 4).
+// Fase 4: "Tambah channel" TikTok memicu OAuth nyata (start -> consent browser
+// -> callback backend -> Connection tersimpan terenkripsi). Platform lain
+// masih simulasi lokal sampai diimplementasi menyusul pola yang sama.
+// Sheet paket/brand kit/tim menyusul (polish Fase 2 lanjutan).
 
 import React, { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import { useBr } from "@/context/BrContext";
 import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
 import { BR_PERSONAS, BR_PERSONA_ORDER } from "@/data/personas";
@@ -16,6 +18,9 @@ import { BrAppShell, BrAppHeader, GhostButton } from "@/components/br/AppChrome"
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
+import { apiGet, apiPost } from "@/lib/api";
+
+const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok"];
 
 const BR_TOKEN_STATUS: Record<string, { st: "ok" | "expiring"; note_en: string; note_id: string }> = {
   tiktok: { st: "expiring", note_en: "expires in 24h · auto-refresh on", note_id: "kedaluwarsa 24j · auto-refresh aktif" },
@@ -48,6 +53,30 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [extra, setExtra] = useState<Record<string, boolean>>({});
+  const [connecting, setConnecting] = useState<PlatformId | null>(null);
+
+  async function handleConnect(pid: PlatformId) {
+    if (!OAUTH_IMPLEMENTED.includes(pid)) {
+      // Belum diimplementasi server-side — simulasi lokal saja (lihat Bab 04 §5).
+      setExtra((e) => ({ ...e, [pid]: true }));
+      return;
+    }
+    setConnecting(pid);
+    try {
+      const account = await apiGet("/accounts/demo");
+      const { consentUrl } = await apiPost(`/auth/${pid}/start`, { accountId: account.id });
+      const result = await WebBrowser.openAuthSessionAsync(consentUrl, "brandreel://oauth-callback");
+      if (result.type === "success" && result.url.includes("status=ok")) {
+        setExtra((e) => ({ ...e, [pid]: true }));
+      } else if (result.type === "success" && result.url.includes("status=error")) {
+        Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", pid);
+      }
+    } catch (e: any) {
+      Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", e.message ?? String(e));
+    } finally {
+      setConnecting(null);
+    }
+  }
 
   const connectedIds = [
     ...persona.platforms,
@@ -162,19 +191,20 @@ export default function ProfileScreen() {
           })}
         </GlassPanel>
 
-        {/* Tambah channel — OAuth asli dipasang di Fase 4 */}
+        {/* Tambah channel — TikTok pakai OAuth nyata; lainnya simulasi sampai diimplementasi */}
         {available.length > 0 && (
           <>
             <Eyebrow color={theme.ink3}>{lang === "en" ? "ADD CHANNELS" : "TAMBAH CHANNEL"}</Eyebrow>
             <View style={{ gap: 8 }}>
               {available.map((pid) => {
                 const p = BR_PLATFORMS[pid];
+                const busy = connecting === pid;
                 return (
-                  <Pressable key={pid} onPress={() => setExtra((e) => ({ ...e, [pid]: true }))}
+                  <Pressable key={pid} onPress={() => handleConnect(pid)} disabled={busy}
                     style={({ pressed }) => ({
                       borderWidth: 1, borderColor: theme.hair, backgroundColor: theme.glassHi,
                       borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12,
-                      flexDirection: "row", alignItems: "center", gap: 12,
+                      flexDirection: "row", alignItems: "center", gap: 12, opacity: busy ? 0.6 : 1,
                       transform: [{ scale: pressed ? 0.985 : 1 }],
                     })}>
                     <PlatformBadge pid={pid} size={32} />
@@ -186,7 +216,7 @@ export default function ProfileScreen() {
                     </View>
                     <View style={{ borderWidth: 1, borderColor: p.color + "55", backgroundColor: p.color + "12", borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12 }}>
                       <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: p.color, letterSpacing: 0.8, textTransform: "uppercase" }}>
-                        {t.onboard.connect}
+                        {busy ? "···" : t.onboard.connect}
                       </Text>
                     </View>
                   </Pressable>

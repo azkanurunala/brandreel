@@ -1,0 +1,72 @@
+// src/lib/tiktok.ts — Login Kit TikTok: authorize URL + tukar code/refresh token (Bab 04)
+import { env } from "../env.js";
+
+export class TikTokUnavailableError extends Error {
+  constructor() {
+    super("TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET belum diisi (lihat Bab 15)");
+    this.name = "TikTokUnavailableError";
+  }
+}
+
+const SCOPES = "video.publish,video.upload,user.info.basic,user.info.stats";
+
+export function tiktokRedirectUri(): string {
+  return `${env.APP_BASE_URL}/auth/tiktok/callback`;
+}
+
+export function buildTikTokAuthorizeUrl(state: string): string {
+  if (!env.TIKTOK_CLIENT_KEY) throw new TikTokUnavailableError();
+  const params = new URLSearchParams({
+    client_key: env.TIKTOK_CLIENT_KEY,
+    scope: SCOPES,
+    response_type: "code",
+    redirect_uri: tiktokRedirectUri(),
+    state,
+  });
+  return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
+}
+
+export interface TikTokTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  refresh_expires_in: number;
+  open_id: string;
+  scope: string;
+  token_type: string;
+}
+
+export async function exchangeTikTokCode(code: string): Promise<TikTokTokenResponse> {
+  if (!env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET) throw new TikTokUnavailableError();
+  const r = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_key: env.TIKTOK_CLIENT_KEY,
+      client_secret: env.TIKTOK_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: tiktokRedirectUri(),
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok || data.error) throw new Error(data.error_description ?? data.error ?? `TikTok token error (${r.status})`);
+  return data as TikTokTokenResponse;
+}
+
+export async function refreshTikTokToken(refreshToken: string): Promise<TikTokTokenResponse> {
+  if (!env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET) throw new TikTokUnavailableError();
+  const r = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_key: env.TIKTOK_CLIENT_KEY,
+      client_secret: env.TIKTOK_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok || data.error) throw new Error(data.error_description ?? data.error ?? `TikTok refresh error (${r.status})`);
+  return data as TikTokTokenResponse;
+}
