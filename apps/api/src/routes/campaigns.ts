@@ -29,7 +29,10 @@ campaignsRouter.get("/campaigns", requireAuth, async (req, res) => {
       hooks: true,
       renders: true,
       posts: {
-        select: { platform: true, state: true, permalink: true, scheduledAt: true, hook: { select: { label: true } } },
+        select: {
+          platform: true, state: true, permalink: true, scheduledAt: true, postedAt: true, lastError: true,
+          hook: { select: { label: true } },
+        },
       },
     },
   });

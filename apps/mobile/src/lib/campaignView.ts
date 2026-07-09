@@ -34,7 +34,7 @@ const STATUS_MAP: Record<string, CampaignStatus> = {
   archived: "live",
 };
 
-function relativeTime(iso: string): { en: string; id: string } {
+export function relativeTime(iso: string): { en: string; id: string } {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (mins < 1) return { en: "just now", id: "baru saja" };
   if (mins < 60) return { en: `${mins}m ago`, id: `${mins} menit lalu` };
@@ -49,6 +49,8 @@ export interface ApiPost {
   state: "queued" | "posted" | "retry" | "failed";
   permalink?: string | null;
   scheduledAt?: string | null;
+  postedAt?: string | null;
+  lastError?: string | null;
   hook?: { label: string } | null;
 }
 export interface ApiHook {

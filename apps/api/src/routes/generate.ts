@@ -3,6 +3,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../env.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const generateRouter = Router();
 
@@ -11,7 +12,9 @@ const bodySchema = z.object({
   maxTokens: z.number().int().positive().max(4096).optional(),
 });
 
-generateRouter.post("/generate", async (req, res) => {
+// requireAuth — proxy Claude nyata (biaya per token), jangan biarkan
+// dipanggil tanpa login (bisa dipakai orang lain buat habisin kuota API).
+generateRouter.post("/generate", requireAuth, async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "prompt wajib diisi" });
   if (!env.ANTHROPIC_API_KEY)

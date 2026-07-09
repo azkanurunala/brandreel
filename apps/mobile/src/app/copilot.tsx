@@ -1,6 +1,6 @@
 // Copilot — porting BrCopilot dari prototype assets/br-screens-insights.jsx.
-// Fase 2: UI chat lengkap; balasan sementara offline. Fase 3: sambungkan ke
-// backend AI proxy (POST /generate) — ganti fungsi fakeReply di bawah.
+// Balasan nyata dari Claude lewat proxy backend (POST /generate, Bab 03) —
+// bukan fakeReply kaleng lagi.
 
 import React, { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "@/context/BrContext";
 import { BrAppHeader } from "@/components/br/AppChrome";
 import { FONT } from "@/components/br/fonts";
+import { apiPost } from "@/lib/api";
 
 interface Msg {
   role: "user" | "assistant";
@@ -23,16 +24,18 @@ function ts(): string {
   return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
 }
 
-// Fase 3: ganti dengan panggilan backend (apiPost("/generate", ...)).
-async function fakeReply(lang: "en" | "id"): Promise<string> {
-  await new Promise((r) => setTimeout(r, 900));
-  return lang === "en"
-    ? "(Copilot goes live in Phase 3 — the backend AI proxy will answer here.)"
-    : "(Copilot aktif di Fase 3 — proxy AI backend akan menjawab di sini.)";
+async function askCopilot(history: Msg[], question: string, lang: "en" | "id"): Promise<string> {
+  const language = lang === "en" ? "English" : "Bahasa Indonesia";
+  const context = history.slice(-6).map((m) => `${m.role === "user" ? "User" : "Copilot"}: ${m.text}`).join("\n");
+  const prompt = `You are BrandReel Copilot, an assistant embedded in a short-form UGC video app. Help the user with hook ideas, caption tuning, and posting-time advice. Be concise (2-4 sentences unless asked for a list). Reply in ${language}.\n\n${context ? context + "\n" : ""}User: ${question}`;
+  const res = await apiPost("/generate", { prompt, maxTokens: 500 });
+  const text = res?.content?.[0]?.text;
+  if (!text) throw new Error("Balasan kosong dari Claude");
+  return text.trim();
 }
 
 export default function CopilotScreen() {
-  const { theme, lang, t, persona } = useBr();
+  const { theme, lang, t, account } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -41,8 +44,8 @@ export default function CopilotScreen() {
     role: "assistant",
     time: "",
     text: lang === "en"
-      ? `Hi ${persona.name.split(" ")[0]} — I'm your BrandReel Copilot. Ask me to draft hooks, tune captions, or pick the best posting window.`
-      : `Hai ${persona.name.split(" ")[0]} — saya Copilot BrandReel. Minta saya buat hook, atur caption, atau pilih waktu posting terbaik.`,
+      ? `Hi ${(account?.name ?? account?.email ?? "there").split(" ")[0]} — I'm your BrandReel Copilot. Ask me to draft hooks, tune captions, or pick the best posting window.`
+      : `Hai ${(account?.name ?? account?.email ?? "").split(" ")[0]} — saya Copilot BrandReel. Minta saya buat hook, atur caption, atau pilih waktu posting terbaik.`,
   }]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,15 +62,16 @@ export default function CopilotScreen() {
     const txt = (text ?? draft).trim();
     if (!txt || busy) return;
     setDraft("");
+    const history = messages;
     setMessages((m) => [...m, { role: "user", text: txt, time: ts() }]);
     setBusy(true);
     try {
-      const reply = await fakeReply(lang);
+      const reply = await askCopilot(history, txt, lang);
       setMessages((m) => [...m, { role: "assistant", text: reply, time: ts() }]);
-    } catch {
+    } catch (e: any) {
       setMessages((m) => [...m, {
         role: "assistant",
-        text: lang === "en" ? "(Connection issue — please retry)" : "(Gangguan koneksi — coba lagi)",
+        text: e.message ?? (lang === "en" ? "(Connection issue — please retry)" : "(Gangguan koneksi — coba lagi)"),
         time: "—",
       }]);
     } finally {
