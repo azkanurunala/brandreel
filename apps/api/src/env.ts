@@ -21,9 +21,17 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   VEO_MODEL: z.string().default("veo3.1-fast"),
 
-  // OAuth TikTok (Bab 04) — wajib saat fitur connect TikTok dipakai
+  // OAuth tiap platform (Bab 04) — opsional; wajib saat platform tsb dipakai
   TIKTOK_CLIENT_KEY: z.string().optional(),
   TIKTOK_CLIENT_SECRET: z.string().optional(),
+  META_APP_ID: z.string().optional(), // Instagram + Facebook (Meta Graph API sama)
+  META_APP_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(), // YouTube
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  LINKEDIN_CLIENT_ID: z.string().optional(),
+  LINKEDIN_CLIENT_SECRET: z.string().optional(),
+  X_CLIENT_ID: z.string().optional(),
+  X_CLIENT_SECRET: z.string().optional(),
 
   // Storage video (Bab 03/15) — wajib saat render Veo dipakai
   STORAGE_BUCKET: z.string().optional(),

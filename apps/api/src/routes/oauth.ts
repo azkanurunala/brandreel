@@ -1,21 +1,26 @@
 // src/routes/oauth.ts — alur OAuth 3-langkah: start -> consent -> callback (Bab 04)
-// Baru TikTok yang diimplementasi penuh; platform lain (Instagram/YouTube/
-// LinkedIn/X/Facebook) mengikuti pola identik — lihat Bab 04 §5 untuk scope
-// & dokumentasi tiap platform saat menambahkannya.
+// Semua 6 platform diimplementasi. Instagram/Facebook/LinkedIn menyimpan
+// "{id}:{token}" sebagai access_token di vault (adapter publish butuh id
+// Page/IG-account/member selain token) — lihat lib/adapters/{instagram,
+// facebook,linkedin}.ts. X pakai PKCE (Bab 04 §2), verifier disimpan
+// sebentar bareng state.
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { encryptTokenRef } from "../lib/vault.js";
+import { encryptTokenRef, decryptTokenRef } from "../lib/vault.js";
 import { buildTikTokAuthorizeUrl, exchangeTikTokCode, refreshTikTokToken } from "../lib/tiktok.js";
-import { env } from "../env.js";
+import { buildMetaAuthorizeUrl, exchangeMetaCode } from "../lib/meta.js";
+import { buildGoogleAuthorizeUrl, exchangeGoogleCode, refreshGoogleToken, fetchYouTubeChannelId } from "../lib/google.js";
+import { buildLinkedInAuthorizeUrl, exchangeLinkedInCode, fetchLinkedInMemberId } from "../lib/linkedin.js";
+import { buildXAuthorizeUrl, exchangeXCode, fetchXUserId, generatePkce } from "../lib/x.js";
 
 export const oauthRouter = Router();
 
 // State anti-CSRF (Bab 04 §2) — tautkan state acak ke accountId sebelum
 // redirect ke platform. Map di memori proses; produksi multi-instance
 // sebaiknya pakai Redis dengan TTL (lihat queue.ts untuk koneksi Redis yang sudah ada).
-const pendingState = new Map<string, { accountId: string; platform: string; createdAt: number }>();
+const pendingState = new Map<string, { accountId: string; platform: string; createdAt: number; pkceVerifier?: string }>();
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 function cleanupExpiredState() {
@@ -33,7 +38,9 @@ oauthRouter.post("/auth/:platform/start", (req, res) => {
 
   cleanupExpiredState();
   const state = randomBytes(24).toString("hex");
-  pendingState.set(state, { accountId: parsed.data.accountId, platform, createdAt: Date.now() });
+  const entry: { accountId: string; platform: string; createdAt: number; pkceVerifier?: string } = {
+    accountId: parsed.data.accountId, platform, createdAt: Date.now(),
+  };
 
   try {
     let consentUrl: string;
@@ -41,12 +48,28 @@ oauthRouter.post("/auth/:platform/start", (req, res) => {
       case "tiktok":
         consentUrl = buildTikTokAuthorizeUrl(state);
         break;
+      case "instagram":
+      case "facebook":
+        consentUrl = buildMetaAuthorizeUrl(platform, state);
+        break;
+      case "youtube":
+        consentUrl = buildGoogleAuthorizeUrl(state);
+        break;
+      case "linkedin":
+        consentUrl = buildLinkedInAuthorizeUrl(state);
+        break;
+      case "x": {
+        const pkce = generatePkce();
+        entry.pkceVerifier = pkce.verifier;
+        consentUrl = buildXAuthorizeUrl(state, pkce.challenge);
+        break;
+      }
       default:
-        return res.status(501).json({ error: `OAuth ${platform} belum diimplementasi — lihat Bab 04` });
+        return res.status(400).json({ error: `Platform ${platform} tidak dikenal` });
     }
+    pendingState.set(state, entry);
     res.json({ consentUrl, state });
   } catch (err: any) {
-    pendingState.delete(state);
     res.status(501).json({ error: err.message });
   }
 });
@@ -55,13 +78,21 @@ oauthRouter.post("/auth/:platform/start", (req, res) => {
 oauthRouter.get("/auth/:platform/callback", async (req, res) => {
   const platform = req.params.platform;
   const { code, state, error: platformError } = req.query as Record<string, string>;
-  const appReturnUrl = `${env.WEB_APP_URL.replace(/\/$/, "")}`;
 
   function fail(message: string) {
     res.status(400).send(
       `<html><body style="font-family:sans-serif;padding:24px">` +
       `<h3>Gagal menghubungkan ${platform}</h3><p>${message}</p>` +
       `<p><a href="brandreel://oauth-callback?platform=${platform}&status=error">Kembali ke aplikasi</a></p>` +
+      `</body></html>`
+    );
+  }
+  function success() {
+    res.send(
+      `<html><body style="font-family:sans-serif;padding:24px">` +
+      `<h3>Akun ${platform} berhasil terhubung!</h3><p>Kamu bisa menutup halaman ini.</p>` +
+      `<script>setTimeout(function(){location.href="brandreel://oauth-callback?platform=${platform}&status=ok";}, 400);</script>` +
+      `<p><a href="brandreel://oauth-callback?platform=${platform}&status=ok">Kembali ke aplikasi</a></p>` +
       `</body></html>`
     );
   }
@@ -74,46 +105,69 @@ oauthRouter.get("/auth/:platform/callback", async (req, res) => {
   if (!pending || pending.platform !== platform) return fail("state tidak valid atau kedaluwarsa — coba hubungkan ulang");
 
   try {
-    if (platform !== "tiktok") throw new Error(`OAuth ${platform} belum diimplementasi`);
+    let remoteUserId: string;
+    let tokenRefPayload: Record<string, unknown>;
+    let scopes: string[];
+    let expiresAt: Date;
 
-    const tokens = await exchangeTikTokCode(code);
-    const tokenRef = encryptTokenRef({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-    });
+    switch (platform) {
+      case "tiktok": {
+        const tokens = await exchangeTikTokCode(code);
+        remoteUserId = tokens.open_id;
+        tokenRefPayload = { access_token: tokens.access_token, refresh_token: tokens.refresh_token };
+        scopes = tokens.scope.split(",");
+        expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+        break;
+      }
+      case "instagram":
+      case "facebook": {
+        const page = await exchangeMetaCode(platform, code);
+        remoteUserId = platform === "instagram" ? page.instagramBusinessId! : page.pageId;
+        tokenRefPayload = { access_token: `${remoteUserId}:${page.pageAccessToken}` };
+        scopes = platform === "instagram"
+          ? ["instagram_basic", "instagram_content_publish"]
+          : ["pages_manage_posts", "pages_read_engagement"];
+        expiresAt = new Date(Date.now() + 60 * 24 * 3600 * 1000); // Page token Meta ~60 hari
+        break;
+      }
+      case "youtube": {
+        const tokens = await exchangeGoogleCode(code);
+        remoteUserId = await fetchYouTubeChannelId(tokens.access_token);
+        tokenRefPayload = { access_token: tokens.access_token, refresh_token: tokens.refresh_token };
+        scopes = tokens.scope.split(" ");
+        expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+        break;
+      }
+      case "linkedin": {
+        const tokens = await exchangeLinkedInCode(code);
+        const memberId = await fetchLinkedInMemberId(tokens.access_token);
+        remoteUserId = memberId;
+        tokenRefPayload = { access_token: `${memberId}:${tokens.access_token}`, refresh_token: tokens.refresh_token };
+        scopes = ["w_member_social"];
+        expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+        break;
+      }
+      case "x": {
+        if (!pending.pkceVerifier) throw new Error("PKCE verifier hilang — mulai ulang dari /auth/x/start");
+        const tokens = await exchangeXCode(code, pending.pkceVerifier);
+        remoteUserId = await fetchXUserId(tokens.access_token);
+        tokenRefPayload = { access_token: tokens.access_token, refresh_token: tokens.refresh_token };
+        scopes = tokens.scope.split(" ");
+        expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+        break;
+      }
+      default:
+        throw new Error(`Platform ${platform} tidak dikenal`);
+    }
 
+    const tokenRef = encryptTokenRef(tokenRefPayload);
     await prisma.connection.upsert({
-      where: {
-        accountId_platform_remoteUserId: {
-          accountId: pending.accountId,
-          platform: "tiktok",
-          remoteUserId: tokens.open_id,
-        },
-      },
-      update: {
-        tokenRef,
-        scopes: tokens.scope.split(","),
-        status: "active",
-        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-      },
-      create: {
-        accountId: pending.accountId,
-        platform: "tiktok",
-        remoteUserId: tokens.open_id,
-        tokenRef,
-        scopes: tokens.scope.split(","),
-        status: "active",
-        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-      },
+      where: { accountId_platform_remoteUserId: { accountId: pending.accountId, platform: platform as any, remoteUserId } },
+      update: { tokenRef, scopes, status: "active", expiresAt },
+      create: { accountId: pending.accountId, platform: platform as any, remoteUserId, tokenRef, scopes, status: "active", expiresAt },
     });
 
-    res.send(
-      `<html><body style="font-family:sans-serif;padding:24px">` +
-      `<h3>Akun ${platform} berhasil terhubung!</h3><p>Kamu bisa menutup halaman ini.</p>` +
-      `<script>setTimeout(function(){location.href="brandreel://oauth-callback?platform=${platform}&status=ok";}, 400);</script>` +
-      `<p><a href="brandreel://oauth-callback?platform=${platform}&status=ok">Kembali ke aplikasi</a></p>` +
-      `</body></html>`
-    );
+    success();
   } catch (err: any) {
     console.error(err);
     fail(err.message ?? "Gagal menukar code ke token");
@@ -126,15 +180,28 @@ oauthRouter.post("/connections/:id/refresh", async (req, res) => {
   if (!conn) return res.status(404).json({ error: "Koneksi tidak ditemukan" });
 
   try {
-    if (conn.platform !== "tiktok") throw new Error(`Refresh ${conn.platform} belum diimplementasi`);
-    const { decryptTokenRef } = await import("../lib/vault.js");
-    const current = decryptTokenRef<{ refresh_token: string }>(conn.tokenRef);
-    const tokens = await refreshTikTokToken(current.refresh_token);
-    const tokenRef = encryptTokenRef({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
+    let tokenRef: string;
+    let expiresAt: Date;
+
+    if (conn.platform === "tiktok") {
+      const current = decryptTokenRef<{ refresh_token: string }>(conn.tokenRef);
+      const tokens = await refreshTikTokToken(current.refresh_token);
+      tokenRef = encryptTokenRef({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
+      expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+    } else if (conn.platform === "youtube") {
+      const current = decryptTokenRef<{ refresh_token: string }>(conn.tokenRef);
+      const tokens = await refreshGoogleToken(current.refresh_token);
+      tokenRef = encryptTokenRef({ access_token: tokens.access_token, refresh_token: current.refresh_token });
+      expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+    } else {
+      // Instagram/Facebook (Page token ~60 hari), LinkedIn, X: belum ada
+      // mekanisme refresh otomatis di sini — user connect ulang manual dari Profile.
+      throw new Error(`Refresh ${conn.platform} belum diimplementasi — hubungkan ulang manual`);
+    }
 
     const updated = await prisma.connection.update({
       where: { id: conn.id },
-      data: { tokenRef, status: "active", expiresAt: new Date(Date.now() + tokens.expires_in * 1000) },
+      data: { tokenRef, status: "active", expiresAt },
     });
     res.json({ id: updated.id, status: updated.status, expiresAt: updated.expiresAt });
   } catch (err: any) {

@@ -1,8 +1,7 @@
 // Profil — porting BrProfile dari prototype assets/br-screens-insights.jsx.
-// Fase 4: "Tambah channel" TikTok memicu OAuth nyata (start -> consent browser
-// -> callback backend -> Connection tersimpan terenkripsi). Platform lain
-// masih simulasi lokal sampai diimplementasi menyusul pola yang sama.
-// Sheet paket/brand kit/tim menyusul (polish Fase 2 lanjutan).
+// Fase 4: "Tambah channel" memicu OAuth nyata utk semua 6 platform
+// (start -> consent browser -> callback backend -> Connection tersimpan
+// terenkripsi). Sheet paket/brand kit/tim menyusul (polish Fase 2 lanjutan).
 
 import React, { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -20,7 +19,12 @@ import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { apiGet, apiPost } from "@/lib/api";
 
-const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok"];
+const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok", "instagram", "youtube", "linkedin", "twitter", "facebook"];
+
+// Enum backend/Prisma pakai "x"; frontend pakai "twitter" (sesuai prototype).
+function toBackendPlatform(pid: PlatformId): string {
+  return pid === "twitter" ? "x" : pid;
+}
 
 const BR_TOKEN_STATUS: Record<string, { st: "ok" | "expiring"; note_en: string; note_id: string }> = {
   tiktok: { st: "expiring", note_en: "expires in 24h · auto-refresh on", note_id: "kedaluwarsa 24j · auto-refresh aktif" },
@@ -64,7 +68,7 @@ export default function ProfileScreen() {
     setConnecting(pid);
     try {
       const account = await apiGet("/accounts/demo");
-      const { consentUrl } = await apiPost(`/auth/${pid}/start`, { accountId: account.id });
+      const { consentUrl } = await apiPost(`/auth/${toBackendPlatform(pid)}/start`, { accountId: account.id });
       const result = await WebBrowser.openAuthSessionAsync(consentUrl, "brandreel://oauth-callback");
       if (result.type === "success" && result.url.includes("status=ok")) {
         setExtra((e) => ({ ...e, [pid]: true }));
