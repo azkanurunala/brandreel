@@ -18,6 +18,7 @@ import { apiPost } from "@/lib/api";
 import { BrAppShell, BrAppHeader, FloatingActionBar, GhostButton, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
+import { ScheduleSheet } from "@/components/br/ScheduleSheet";
 import { FONT } from "@/components/br/fonts";
 
 function resolveCampaign(id: string | undefined): Campaign {
@@ -49,6 +50,7 @@ export default function DetailScreen() {
 
   const [hook, setHook] = useState<HookId>(c.topHook ?? "h2");
   const [plat, setPlat] = useState<PlatformId>(camPlatforms[0]);
+  const [schedOpen, setSchedOpen] = useState(false);
 
   const platMeta = BR_PLATFORMS[plat];
   const hk = BR_HOOKS[hook];
@@ -260,7 +262,7 @@ export default function DetailScreen() {
       </ScrollView>
 
       <FloatingActionBar>
-        <GhostButton theme={theme} onPress={() => router.push("/schedule")} style={{ paddingHorizontal: 16 }}>
+        <GhostButton theme={theme} onPress={() => setSchedOpen(true)} style={{ paddingHorizontal: 16 }}>
           {t.detail.schedule}
         </GhostButton>
         <PrimaryButton theme={theme} onPress={() => {
@@ -271,6 +273,15 @@ export default function DetailScreen() {
         </PrimaryButton>
       </FloatingActionBar>
       <View style={{ height: insets.bottom }} />
+
+      <ScheduleSheet
+        visible={schedOpen}
+        onClose={() => setSchedOpen(false)}
+        campaign={c}
+        platforms={camPlatforms}
+        hook={hook}
+        onScheduled={() => { setSchedOpen(false); router.push("/schedule"); }}
+      />
     </BrAppShell>
   );
 }
