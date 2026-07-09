@@ -5,7 +5,7 @@ import { BR_PLATFORMS, type HookId, type PlatformId } from "../theme/tokens";
 import type { Lang } from "../i18n/strings";
 
 export type CampaignStatus = "draft" | "generating" | "ready" | "publishing" | "live" | "failed";
-export type PostState = "queued" | "posted" | "retry" | "failed";
+export type PostState = "queued" | "posted" | "retry" | "failed" | "not_started";
 
 export interface PlatformPost {
   state: PostState;
@@ -115,26 +115,13 @@ export function brBuildCaption(campaign: Campaign, hookId: HookId, pid: Platform
   return { text, len: text.length, max: plat.capMax };
 }
 
-// Baris pemeriksaan pra-kirim (ok | warn).
+// Baris pemeriksaan pra-kirim (ok | warn) — dihitung nyata di detail/[id].tsx
+// dari render/connection asli, bukan checklist statis di sini lagi.
 export interface PreflightRow {
   k: string;
   ok: boolean;
   label_en: string;
   label_id: string;
-}
-
-export function brPreflight(campaign: Campaign | null, _lang: Lang): PreflightRow[] {
-  const rows: PreflightRow[] = [
-    { k: "format", ok: true, label_en: "All specs match · aspect, duration, codec", label_id: "Semua spek cocok · rasio, durasi, codec" },
-    { k: "token", ok: true, label_en: "Auth tokens valid · refreshed 7d ahead", label_id: "Token auth valid · disegarkan 7 hari" },
-    { k: "rate", ok: true, label_en: "Rate limits clear · TikTok staggered 1/30m", label_id: "Rate limit aman · TikTok dijeda 1/30m" },
-    { k: "dupe", ok: true, label_en: "No duplicate in 30-day schedule", label_id: "Tak ada duplikat di jadwal 30 hari" },
-    { k: "voice", ok: true, label_en: "Brand voice match · 94% on-tone", label_id: "Brand voice cocok · 94% sesuai" },
-  ];
-  if (campaign && campaign.status === "failed") {
-    rows[0] = { k: "format", ok: false, label_en: "IG rejected · aspect 9:16 expected, got 9:15", label_id: "IG menolak · rasio 9:16, dikirim 9:15" };
-  }
-  return rows;
 }
 
 // Inbox — alert sistem + rekomendasi.

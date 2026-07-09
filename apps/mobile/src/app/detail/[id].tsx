@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr, brStatusMeta } from "@/context/BrContext";
 import { BR_HOOKS, BR_HOOK_ORDER, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
-import { brBuildCaption, brPreflight, type Campaign } from "@/data/campaigns";
+import { brBuildCaption, type Campaign, type PreflightRow } from "@/data/campaigns";
 import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
 import { apiGet, apiPost } from "@/lib/api";
 import { toViewCampaign, hooksToGenerateResult, type ApiCampaign } from "@/lib/campaignView";
@@ -123,6 +123,13 @@ export default function DetailScreen() {
   const [generatingRender, setGeneratingRender] = useState(false);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
 
+  // Koneksi sosmed akun nyata (Bab 04) — dipakai buat cek pra-kirim beneran,
+  // bukan checklist statis ok:true semua (lihat data/campaigns.ts lama).
+  const [connections, setConnections] = useState<{ platform: string; status: string }[] | null>(null);
+  useEffect(() => {
+    apiGet("/connections").then(setConnections).catch(() => setConnections([]));
+  }, []);
+
   const loadRenders = useCallback(async () => {
     if (!backendId) return;
     try { setRenders(await apiGet(`/campaigns/${backendId}/renders`)); }
@@ -181,7 +188,26 @@ export default function DetailScreen() {
 
   const platMeta = BR_PLATFORMS[plat];
   const hk = BR_HOOKS[hook];
-  const preflight = brPreflight(c, lang);
+
+  // Pra-kirim beneran — cuma dua hal yang bisa kita verifikasi nyata dari
+  // sini: render video sudah siap, dan akun sudah connect ke platform
+  // tujuan. Tidak ada baris rate-limit/duplikat/brand-voice fiktif lagi.
+  const backendPlat = plat === "twitter" ? "x" : plat;
+  const platConnection = connections?.find((cn) => cn.platform === backendPlat) ?? null;
+  const preflight: PreflightRow[] = [
+    {
+      k: "format",
+      ok: activeRender?.state === "ready",
+      label_en: activeRender?.state === "ready" ? "Video render ready · aspect, duration, codec" : "Video not rendered yet",
+      label_id: activeRender?.state === "ready" ? "Render video siap · rasio, durasi, codec" : "Video belum di-render",
+    },
+    {
+      k: "token",
+      ok: platConnection?.status === "active",
+      label_en: platConnection?.status === "active" ? `${platMeta.name} connected · token active` : `Not connected to ${platMeta.name} yet`,
+      label_id: platConnection?.status === "active" ? `${platMeta.name} terhubung · token aktif` : `Belum terhubung ke ${platMeta.name}`,
+    },
+  ];
   const allClear = preflight.every((r) => r.ok);
   const sm = brStatusMeta(c.status, theme, t);
 
@@ -370,7 +396,12 @@ export default function DetailScreen() {
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
           <Eyebrow color={theme.ink3}>{t.detail.preflight}</Eyebrow>
           <GlassChip theme={theme} color={allClear ? theme.pos : theme.neg}>
-            {allClear ? (lang === "en" ? "All clear" : "Semua aman") : (lang === "en" ? "1 issue" : "1 masalah")}
+            {allClear
+              ? (lang === "en" ? "All clear" : "Semua aman")
+              : (() => {
+                  const n = preflight.filter((r) => !r.ok).length;
+                  return lang === "en" ? `${n} issue${n === 1 ? "" : "s"}` : `${n} masalah`;
+                })()}
           </GlassChip>
         </View>
         <GlassPanel theme={theme} padding={4} tone="solid">
@@ -406,8 +437,27 @@ export default function DetailScreen() {
         <GhostButton theme={theme} onPress={() => setSchedOpen(true)} style={{ paddingHorizontal: 16 }}>
           {t.detail.schedule}
         </GhostButton>
-        <PrimaryButton theme={theme} onPress={() => {
-          if (backendId) apiPost(`/campaigns/${backendId}/publish`, { hookId: aiHook?.id }).catch((e) => console.warn("publish gagal:", e));
+        <PrimaryButton theme={theme} onPress={async () => {
+          if (!backendId) { router.push(`/publishing/${c.id}`); return; }
+          try {
+            const res = await apiPost(`/campaigns/${backendId}/publish`, { hookId: aiHook?.id });
+            const results = (res?.results ?? []) as { platform: string; ok: boolean; reason?: string }[];
+            if (results.length && !results.some((r) => r.ok)) {
+              // Semua platform ditolak pre-flight (belum connect, render belum
+              // siap, dst) — jangan pindah ke layar Publishing seolah-olah ada
+              // yang jalan, tunjukkan alasannya biar user tahu apa yang harus
+              // dibenerin dulu.
+              const lines = results.map((r) => `${r.platform}: ${r.reason ?? "gagal"}`).join("\n");
+              Alert.alert(
+                lang === "en" ? "Nothing was queued" : "Tidak ada yang terkirim",
+                lang === "en" ? `All platforms rejected:\n${lines}` : `Semua platform ditolak:\n${lines}`
+              );
+              return;
+            }
+          } catch (e: any) {
+            Alert.alert(lang === "en" ? "Couldn't post" : "Gagal posting", e.message ?? String(e));
+            return;
+          }
           router.push(`/publishing/${c.id}`);
         }} style={{ flex: 1 }}>
           {t.detail.postNow} →

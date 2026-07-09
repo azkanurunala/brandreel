@@ -30,6 +30,8 @@ export function AdaptiveShell({ children }: { children: React.ReactNode }) {
   const activeTab = pathToTab(path);
   const hideNav = NO_NAV_PREFIX.some((p) => path.startsWith(p));
   const useSidebar = bp === "tabletLandscape" || bp === "desktop";
+  const showSidebar = useSidebar && !hideNav;
+  const showBottomNav = !useSidebar && !hideNav;
 
   const onTab = useCallback((tab: TabId) => {
     if (tab === "create") {
@@ -40,23 +42,18 @@ export function AdaptiveShell({ children }: { children: React.ReactNode }) {
     if (path !== target) router.replace(target as never);
   }, [router, path]);
 
-  if (hideNav) {
-    return <View style={{ flex: 1, backgroundColor: theme.canvas }}>{children}</View>;
-  }
-
-  if (useSidebar) {
-    return (
-      <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.canvas }}>
-        <BrSidebar rail={bp === "tabletLandscape"} activeTab={activeTab} onTab={onTab} />
-        <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
-      </View>
-    );
-  }
-
+  // `children` (o Stack expo-router) HARUS selalu berada di posisi/kedalaman
+  // pohon React yang sama di semua kombinasi hideNav/sidebar/bottomnav —
+  // kalau strukturnya beda (mis. return berbeda antar cabang if), React
+  // remount total subtree Stack saat pindah rute lintas cabang, yang reset
+  // state routing expo-router web dan melempar user balik ke "/" → /home.
+  // Makanya sidebar/bottomnav dirender sebagai sibling kondisional, BUKAN
+  // early return dengan bentuk wrapper berbeda.
   return (
-    <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-      <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
-      <BottomNav activeTab={activeTab} onTab={onTab} />
+    <View style={{ flex: 1, flexDirection: showSidebar ? "row" : "column", backgroundColor: theme.canvas }}>
+      {showSidebar && <BrSidebar rail={bp === "tabletLandscape"} activeTab={activeTab} onTab={onTab} />}
+      <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{children}</View>
+      {showBottomNav && <BottomNav activeTab={activeTab} onTab={onTab} />}
     </View>
   );
 }

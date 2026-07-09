@@ -19,7 +19,7 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-5"),
   GEMINI_API_KEY: z.string().optional(),
-  VEO_MODEL: z.string().default("veo3.1-fast"),
+  VEO_MODEL: z.string().default("veo-3.1-fast-generate-preview"),
 
   // OAuth tiap platform (Bab 04) — opsional; wajib saat platform tsb dipakai
   TIKTOK_CLIENT_KEY: z.string().optional(),

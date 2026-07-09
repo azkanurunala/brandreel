@@ -95,7 +95,10 @@ export function BottomNav({ activeTab, onTab }: { activeTab: TabId; onTab: (t: T
 
 // ── Sidebar vertikal (tablet landscape = rail ikon · desktop = penuh) ──
 export function BrSidebar({ rail, activeTab, onTab }: { rail: boolean; activeTab: TabId; onTab: (t: TabId) => void }) {
-  const { theme, t, persona } = useBr();
+  const { theme, t, persona, account } = useBr();
+  const identityLabel = account ? (account.name ?? account.email) : "…";
+  const identityInitial = account ? (account.name?.[0] ?? account.email[0]).toUpperCase() : "…";
+  const identityPlan = account ? account.plan.toUpperCase() : "···";
   const items = [
     { id: "home" as TabId, icon: "home", label: t.nav.home },
     { id: "insights" as TabId, icon: "insights", label: t.nav.insights, needs: "analytics" as const },
@@ -157,13 +160,13 @@ export function BrSidebar({ rail, activeTab, onTab }: { rail: boolean; activeTab
           marginHorizontal: rail ? 10 : 0,
           transform: [{ scale: pressed ? 0.975 : 1 }],
         })}>
-        <View style={{ width: 28, height: 28, borderRadius: 999, backgroundColor: persona.color, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10, color: "#fff" }}>{persona.initial}</Text>
+        <View style={{ width: 28, height: 28, borderRadius: 999, backgroundColor: theme.brand, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10, color: "#fff" }}>{identityInitial}</Text>
         </View>
         {!rail && (
           <View style={{ minWidth: 0, flex: 1 }}>
-            <Text numberOfLines={1} style={{ fontFamily: FONT.sansBold, fontSize: 12.5, color: theme.ink }}>{persona.name}</Text>
-            <Text numberOfLines={1} style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>{persona.plan_label}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: FONT.sansBold, fontSize: 12.5, color: theme.ink }}>{identityLabel}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>{identityPlan}</Text>
           </View>
         )}
       </Pressable>

@@ -3,8 +3,7 @@
 // kalau belum ada data (akun baru), tampilkan contoh demo seperti prototype.
 
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "@/context/BrContext";
@@ -42,7 +41,6 @@ interface InsightsApi {
 
 export default function InsightsScreen() {
   const { theme, lang, t, scenario } = useBr();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [live, setLive] = useState<InsightsApi | null>(null);
@@ -106,7 +104,7 @@ export default function InsightsScreen() {
 
         {/* Performa terbaik */}
         <Eyebrow color={theme.ink3}>{t.insights.top}</Eyebrow>
-        <Pressable onPress={() => router.push("/detail/c-bamboo-tb")} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.985 : 1 }] })}>
+        <View>
           <LinearGradient colors={[theme.brand, theme.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }}
             style={{ borderRadius: 16, padding: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -136,7 +134,7 @@ export default function InsightsScreen() {
               </View>
             </View>
           </LinearGradient>
-        </Pressable>
+        </View>
 
         {/* Per platform */}
         <Eyebrow color={theme.ink3}>{t.insights.byPlatform}</Eyebrow>

@@ -59,13 +59,22 @@ const createSchema = z.object({
   brandKitId: z.string().optional(),
 });
 
+const VALID_PLATFORMS = new Set(["tiktok", "instagram", "youtube", "linkedin", "x", "facebook"]);
+
 campaignsRouter.post("/campaigns", requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const created = await prisma.campaign.create({
-    data: { ...parsed.data, platforms: parsed.data.platforms as any, accountId: req.accountId! },
-  });
-  res.status(201).json(created);
+  const invalid = parsed.data.platforms.filter((p) => !VALID_PLATFORMS.has(p));
+  if (invalid.length) return res.status(400).json({ error: `Platform tidak dikenal: ${invalid.join(", ")}` });
+  try {
+    const created = await prisma.campaign.create({
+      data: { ...parsed.data, platforms: parsed.data.platforms as any, accountId: req.accountId! },
+    });
+    res.status(201).json(created);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal membuat campaign" });
+  }
 });
 
 // GET /campaigns/:id/status — status posting per platform (Bab 05)
@@ -117,9 +126,16 @@ Rules:
   try {
     await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "generating" } });
 
-    const reply = await callClaude(prompt, 1400);
-    const data = parseModelJSON<{ hooks?: Record<string, { script?: string; caption?: string }>; hashtags?: string[] }>(reply);
-    if (!data?.hooks) throw new Error("Balasan Claude tidak sesuai skema");
+    // Claude kadang meleset dari skema JSON yang diminta (format nyimpang atau
+    // kepotong) — sekali retry sebelum benar-benar gagal, karena percobaan
+    // kedua biasanya lurus lagi (bukan masalah prompt, cuma variasi model).
+    type HookReply = { hooks?: Record<string, { script?: string; caption?: string }>; hashtags?: string[] };
+    let data: HookReply | null = null;
+    for (let attempt = 0; attempt < 2 && !data?.hooks; attempt++) {
+      const reply = await callClaude(prompt, 2000);
+      data = parseModelJSON<HookReply>(reply);
+    }
+    if (!data?.hooks) throw new Error("Balasan Claude tidak sesuai skema (2x percobaan)");
 
     await prisma.hook.deleteMany({ where: { campaignId: campaign.id } });
     const hooks = await Promise.all(

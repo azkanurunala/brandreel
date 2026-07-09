@@ -23,7 +23,13 @@ app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
 // CORS: WEB_APP_URL (Bab 15) + dev ports Expo + semua *.vercel.app (produksi
 // & preview deploy web app pakai domain vercel.app yang beda tiap deploy).
-const ALLOWED_ORIGINS = [env.WEB_APP_URL, "http://localhost:8081", "http://localhost:19006"];
+const ALLOWED_ORIGINS = [
+  env.WEB_APP_URL,
+  "http://localhost:8081",
+  "http://localhost:19006",
+  "http://localhost:8090",
+  "http://127.0.0.1:8090",
+];
 app.use(
   cors({
     origin(origin, callback) {

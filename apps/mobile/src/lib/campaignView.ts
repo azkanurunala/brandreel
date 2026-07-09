@@ -78,12 +78,15 @@ export function toViewCampaign(api: ApiCampaign): Campaign {
   let status = STATUS_MAP[api.status] ?? "draft";
   if (hasFailed && status !== "draft" && status !== "generating") status = "failed";
 
+  // Cuma isi state dari Post BENERAN — jangan tebak "queued" cuma karena
+  // status campaign "publishing", soalnya publish bisa gagal pre-flight di
+  // SEMUA platform (belum connect dsb) tanpa satu Post pun tercipta, dan
+  // dulu di sini kena tandai "queued" biar keliatan jalan padahal enggak.
   const platforms: Partial<Record<PlatformId, PlatformPost>> = {};
   for (const raw of api.platforms) {
     const pid = toFrontendPlatform(raw);
     const post = posts.find((p) => toFrontendPlatform(p.platform) === pid);
-    if (post) platforms[pid] = { state: post.state };
-    else if (status === "publishing" || status === "ready") platforms[pid] = { state: "queued" };
+    platforms[pid] = { state: post ? post.state : "not_started" };
   }
 
   const rel = relativeTime(api.createdAt);

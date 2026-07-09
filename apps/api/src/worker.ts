@@ -74,35 +74,41 @@ const renderWorker = new Worker(
 
     await prisma.render.update({ where: { id: renderId }, data: { state: "processing" } });
 
-    const durationS = render.hook?.label === "h5" ? 5 : 6;
-    const script = render.hook?.script || render.campaign.product;
-    const prompt = `${durationS}s vertical UGC-style product video for "${render.campaign.product}". Hook: ${script}. Natural handheld phone footage, authentic creator energy, good lighting.`;
+    // Seluruh alur (mulai operasi Veo -> poll -> upload) dibungkus satu
+    // try/catch — kalau startVeoRender sendiri throw (mis. model id salah,
+    // kuota habis), render HARUS tetap ditandai "failed", bukan macet
+    // selamanya di "processing" tanpa pesan error ke user.
+    try {
+      const durationS = render.hook?.label === "h5" ? 5 : 6;
+      const script = render.hook?.script || render.campaign.product;
+      const prompt = `${durationS}s vertical UGC-style product video for "${render.campaign.product}". Hook: ${script}. Natural handheld phone footage, authentic creator energy, good lighting.`;
 
-    const { operationName } = await startVeoRender({
-      prompt,
-      ratio: render.ratio as "9:16" | "1:1" | "16:9",
-      durationSec: durationS,
-    });
-    const result = await waitForVeoRender(operationName);
+      const { operationName } = await startVeoRender({
+        prompt,
+        ratio: render.ratio as "9:16" | "1:1" | "16:9",
+        durationSec: durationS,
+      });
+      const result = await waitForVeoRender(operationName);
 
-    if (result.error || !result.videoBase64) {
+      if (result.error || !result.videoBase64) {
+        throw new Error(result.error ?? "Render gagal");
+      }
+
+      const bytes = Buffer.from(result.videoBase64, "base64");
+      const key = `renders/${render.campaignId}/${render.id}.mp4`;
+      const url = await uploadVideo(key, bytes, result.mimeType ?? "video/mp4");
+
       await prisma.render.update({
         where: { id: renderId },
-        data: { state: "failed", error: result.error ?? "Render gagal" },
+        data: { state: "ready", storageUrl: url, durationS, error: null },
       });
-      throw new Error(result.error ?? "Render gagal");
+
+      return { ok: true, url };
+    } catch (err: any) {
+      const message = err.message ?? String(err);
+      await prisma.render.update({ where: { id: renderId }, data: { state: "failed", error: message } });
+      throw err;
     }
-
-    const bytes = Buffer.from(result.videoBase64, "base64");
-    const key = `renders/${render.campaignId}/${render.id}.mp4`;
-    const url = await uploadVideo(key, bytes, result.mimeType ?? "video/mp4");
-
-    await prisma.render.update({
-      where: { id: renderId },
-      data: { state: "ready", storageUrl: url, durationS, error: null },
-    });
-
-    return { ok: true, url };
   },
   { connection }
 );

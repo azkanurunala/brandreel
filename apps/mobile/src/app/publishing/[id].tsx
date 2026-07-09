@@ -9,7 +9,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "@/context/BrContext";
-import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
+import { BR_PLATFORMS, type PlatformId } from "@/theme/tokens";
 import { type PlatformPost } from "@/data/campaigns";
 import { getPendingCampaign } from "@/data/pendingCampaign";
 import { apiGet } from "@/lib/api";
@@ -45,9 +45,9 @@ export default function PublishingScreen() {
   }, [backendId]);
 
   const c = fetchedCampaign;
-  const initial: Record<string, PlatformPost> = c && Object.keys(c.platforms).length
+  const initial: Record<string, PlatformPost> = c
     ? Object.fromEntries(Object.entries(c.platforms).map(([k, v]) => [k, { ...(v as PlatformPost) }]))
-    : Object.fromEntries(BR_PLATFORM_ORDER.map((p) => [p, { state: "queued" as const }]));
+    : {};
 
   const [states, setStates] = useState(initial);
   useEffect(() => { setStates(initial); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [c?.id]);
@@ -82,6 +82,7 @@ export default function PublishingScreen() {
     queued: { label: t.pub.queued, color: theme.ink3 },
     retry: { label: t.pub.retry, color: theme.warn },
     failed: { label: t.pub.failed, color: theme.neg },
+    not_started: { label: t.pub.notStarted, color: theme.ink3 },
   };
   const postedCount = Object.values(states).filter((s) => s.state === "posted").length;
   const total = Object.keys(states).length;

@@ -100,6 +100,13 @@ publishRouter.post("/campaigns/:id/publish", requireAuth, async (req, res) => {
     results.push({ platform, ok: true, postId: post.id });
   }
 
-  await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "publishing" } });
-  res.status(202).json({ results });
+  // Cuma tandai "publishing" kalau MINIMAL satu platform beneran ke-queue —
+  // kalau semua gagal pre-flight (belum connect dsb), status kampanye tidak
+  // boleh berubah seolah-olah ada yang jalan (lihat toViewCampaign yang
+  // membaca status ini buat nge-render papan status per-channel).
+  const anyQueued = results.some((r) => r.ok);
+  if (anyQueued) {
+    await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "publishing" } });
+  }
+  res.status(202).json({ results, anyQueued });
 });

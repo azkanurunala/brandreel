@@ -8,7 +8,13 @@ import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr } from "@/context/BrContext";
-import { BR_PLATFORMS, type PlatformId } from "@/theme/tokens";
+import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
+
+// Enum backend cuma kenal "x", bukan "twitter" (id internal frontend —
+// samakan dengan onboard.tsx/profile.tsx yang connect OAuth platform).
+function toBackendPlatform(pid: PlatformId): string {
+  return pid === "twitter" ? "x" : pid;
+}
 import { BrAppShell, BrAppHeader, FloatingActionBar, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
@@ -34,14 +40,14 @@ interface BrandKit {
 }
 
 export default function CreateScreen() {
-  const { theme, lang, t, persona } = useBr();
+  const { theme, lang, t } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [product, setProduct] = useState("");
   const [desc, setDesc] = useState("");
   const [logoColor, setLogoColor] = useState(theme.brand);
-  const [plats, setPlats] = useState<PlatformId[]>(persona.platforms as PlatformId[]);
+  const [plats, setPlats] = useState<PlatformId[]>(BR_PLATFORM_ORDER);
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [voice, setVoice] = useState("");
@@ -116,7 +122,7 @@ export default function CreateScreen() {
         desc_en: desc || "New product", desc_id: desc || "Produk baru",
         created_en: "Just generated", created_id: "Baru dibuat",
         status: "ready", topHook: "h2", views: "—", eng: "—",
-        hashtags: ["#new", "#eco", "#sustainable", "#brandreel", "#ugc", "#viral"],
+        hashtags: [], // diisi Claude nyata begitu /generate selesai — jangan tebak-tebak per produk
         platforms: Object.fromEntries(plats.map((p) => [p, { state: "queued" as const }])),
       },
       input: { product: productName, desc: desc.trim(), voice, platforms: plats, lang },
@@ -131,7 +137,7 @@ export default function CreateScreen() {
           description: desc.trim() || undefined,
           productImageUrl: productImageUrl ?? undefined,
           brandKitId: selectedKitId ?? undefined,
-          platforms: plats,
+          platforms: plats.map(toBackendPlatform),
         });
         createdId = campaign.id;
         const gen = await apiPost(`/campaigns/${campaign.id}/generate`, { lang, voice: voice.trim() || undefined });
@@ -301,7 +307,7 @@ export default function CreateScreen() {
         {/* Platform tujuan */}
         <Label color={theme.ink3}>{t.create.platforms} · {plats.length}</Label>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(persona.platforms as PlatformId[]).map((pid) => {
+          {BR_PLATFORM_ORDER.map((pid) => {
             const p = BR_PLATFORMS[pid];
             const on = plats.includes(pid);
             return (

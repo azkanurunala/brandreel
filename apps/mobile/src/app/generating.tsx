@@ -31,12 +31,16 @@ export default function GeneratingScreen() {
   const [phase, setPhase] = useState(0);
   const [pct, setPct] = useState(0);
   const aiSettledRef = useRef(false);
+  const [aiFailed, setAiFailed] = useState(false);
 
   // Tunggu promise generate nyata yang dimulai di create.tsx (Claude via /generate).
+  // Promise ini tidak pernah reject (create.tsx catch-nya balikin null) — jadi
+  // hasil null berarti Claude beneran gagal, bukan cuma "belum selesai".
   useEffect(() => {
     let alive = true;
     const pending = getPendingCampaign();
     const promise = pending?.generatePromise ?? Promise.resolve(null);
+    promise.then((r) => { if (alive && !r) setAiFailed(true); });
     promise.finally(() => { if (alive) aiSettledRef.current = true; });
     return () => { alive = false; };
   }, []);
@@ -89,8 +93,8 @@ export default function GeneratingScreen() {
           </View>
         </View>
 
-        <Text style={{ fontFamily: FONT.display, fontSize: 24, letterSpacing: -0.7, color: theme.ink, textAlign: "center", lineHeight: 27 }}>
-          {allDone ? g.done : g.title}
+        <Text style={{ fontFamily: FONT.display, fontSize: 24, letterSpacing: -0.7, color: allDone && aiFailed ? theme.neg : theme.ink, textAlign: "center", lineHeight: 27 }}>
+          {allDone ? (aiFailed ? (lang === "en" ? "AI script failed — you can retry" : "Skrip AI gagal — bisa dicoba lagi") : g.done) : g.title}
         </Text>
 
         {/* Daftar fase */}
@@ -133,7 +137,14 @@ export default function GeneratingScreen() {
 
       <View style={{ paddingHorizontal: 22, paddingTop: 10, paddingBottom: 18 + insets.bottom }}>
         {allDone ? (
-          <PrimaryButton theme={theme} onPress={() => router.replace("/detail/__new")}>{g.review} →</PrimaryButton>
+          <PrimaryButton theme={theme} onPress={() => {
+            // Rute lewat id backend asli begitu tersedia, bukan selalu
+            // "__new" — "__new" cuma baca state in-memory yang hilang kalau
+            // halaman di-reload, jadi jadi jalan buntu permanen kalau dipakai
+            // terus (lihat catatan di detail/[id].tsx).
+            const backendId = getPendingCampaign()?.backendId;
+            router.replace((backendId && backendId !== "pending" ? `/detail/${backendId}` : "/detail/__new") as never);
+          }}>{g.review} →</PrimaryButton>
         ) : (
           <Text style={{
             fontFamily: FONT.mono, fontSize: 10, letterSpacing: 1.2, textAlign: "center", textTransform: "uppercase",
