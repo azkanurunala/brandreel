@@ -1,7 +1,8 @@
 // Insights — porting BrInsights dari prototype assets/br-screens-insights.jsx.
-// Fase 2: data dummy; Fase 6 diganti agregasi backend (/insights).
+// Fase 6: ditarik dari GET /insights nyata saat ada snapshot di DB;
+// kalau belum ada data (akun baru), tampilkan contoh demo seperti prototype.
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { BR_HOOKS, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/to
 import { BrAppShell, BrAppHeader } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { FONT } from "@/components/br/fonts";
+import { apiGet } from "@/lib/api";
 
 function Eyebrow({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -20,22 +22,58 @@ function Eyebrow({ children, color }: { children: React.ReactNode; color: string
   );
 }
 
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+// Enum Prisma pakai "x"; tampilan pakai "twitter" (samakan dengan tokens.ts).
+function toDisplayPid(p: string): PlatformId {
+  return p === "x" ? "twitter" : (p as PlatformId);
+}
+
+interface InsightsApi {
+  total: { views: number; likes: number; comments: number; shares: number; reach: number };
+  perPlatform: Record<string, { views: number; likes: number; comments: number; shares: number; reach: number }>;
+  byHook: { label: string; views: number; pct: number }[];
+  top: { product: string; hookLabel: string | null; views: number; engagementPct: number } | null;
+}
+
 export default function InsightsScreen() {
   const { theme, lang, t, scenario } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const platData: { pid: PlatformId; v: number; label: string }[] = [
-    { pid: "tiktok", v: 1200, label: "1.2M" },
-    { pid: "instagram", v: 272, label: "272K" },
-    { pid: "youtube", v: 113, label: "113K" },
-    { pid: "twitter", v: 28, label: "28K" },
-    { pid: "linkedin", v: 15, label: "15K" },
-  ];
-  const maxV = Math.max(...platData.map((d) => d.v));
-  const hookData: { hid: HookId; pct: number }[] = [
-    { hid: "h3", pct: 92 }, { hid: "h2", pct: 71 }, { hid: "h1", pct: 58 }, { hid: "h4", pct: 49 }, { hid: "h5", pct: 38 },
-  ];
+  const [live, setLive] = useState<InsightsApi | null>(null);
+  useEffect(() => {
+    let alive = true;
+    apiGet("/insights").then((res) => { if (alive) setLive(res); }).catch((e) => console.warn("fetch insights gagal:", e));
+    return () => { alive = false; };
+  }, []);
+
+  const hasLiveData = !!live && live.total.views > 0;
+
+  const platData: { pid: PlatformId; v: number; label: string }[] = hasLiveData
+    ? Object.entries(live!.perPlatform).map(([p, d]) => ({ pid: toDisplayPid(p), v: d.views, label: fmtCompact(d.views) }))
+    : [
+        { pid: "tiktok", v: 1200, label: "1.2M" },
+        { pid: "instagram", v: 272, label: "272K" },
+        { pid: "youtube", v: 113, label: "113K" },
+        { pid: "twitter", v: 28, label: "28K" },
+        { pid: "linkedin", v: 15, label: "15K" },
+      ];
+  const maxV = Math.max(1, ...platData.map((d) => d.v));
+
+  const hookData: { hid: HookId; pct: number }[] = hasLiveData && live!.byHook.length
+    ? live!.byHook.filter((h): h is { label: HookId; views: number; pct: number } => h.label in BR_HOOKS).map((h) => ({ hid: h.label, pct: Math.max(6, h.pct) }))
+    : [
+        { hid: "h3", pct: 92 }, { hid: "h2", pct: 71 }, { hid: "h1", pct: 58 }, { hid: "h4", pct: 49 }, { hid: "h5", pct: 38 },
+      ];
+
+  const topHookMeta = hasLiveData && live!.top?.hookLabel && live!.top.hookLabel in BR_HOOKS
+    ? BR_HOOKS[live!.top!.hookLabel as HookId]
+    : BR_HOOKS.h3;
 
   return (
     <BrAppShell theme={theme} density="soft">
@@ -50,9 +88,9 @@ export default function InsightsScreen() {
         {/* Baris KPI */}
         <View style={{ flexDirection: "row", gap: 9 }}>
           {[
-            { v: scenario.impressions, l: t.home.impressions },
-            { v: scenario.eng, l: t.home.engagement },
-            { v: scenario.reach, l: t.home.reach },
+            { v: hasLiveData ? fmtCompact(live!.total.views) : scenario.impressions, l: t.home.impressions },
+            { v: hasLiveData ? `${((live!.total.likes + live!.total.comments + live!.total.shares) / Math.max(1, live!.total.views) * 100).toFixed(1)}%` : scenario.eng, l: t.home.engagement },
+            { v: hasLiveData ? fmtCompact(live!.total.reach) : scenario.reach, l: t.home.reach },
           ].map((s, i) => (
             <GlassPanel key={i} theme={theme} padding={13} style={{ flex: 1 }}>
               <Text style={{ fontFamily: FONT.display, fontSize: 20, color: theme.ink, letterSpacing: -0.5 }}>{s.v}</Text>
@@ -71,17 +109,25 @@ export default function InsightsScreen() {
                 width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.2)",
                 borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", alignItems: "center", justifyContent: "center",
               }}>
-                <Text style={{ fontFamily: FONT.display, color: "#fff", fontSize: 16 }}>BT</Text>
+                <Text style={{ fontFamily: FONT.display, color: "#fff", fontSize: 16 }}>
+                  {hasLiveData ? live!.top!.product.slice(0, 2).toUpperCase() : "BT"}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: "rgba(255,255,255,0.85)", letterSpacing: 1, textTransform: "uppercase" }}>
-                  HOOK 3 · {lang === "en" ? BR_HOOKS.h3.key_en : BR_HOOKS.h3.key_id}
+                  HOOK {topHookMeta.num} · {lang === "en" ? topHookMeta.key_en : topHookMeta.key_id}
                 </Text>
-                <Text style={{ fontFamily: FONT.display, fontSize: 18, color: "#fff", letterSpacing: -0.4, marginTop: 3 }}>Bamboo toothbrush</Text>
+                <Text style={{ fontFamily: FONT.display, fontSize: 18, color: "#fff", letterSpacing: -0.4, marginTop: 3 }}>
+                  {hasLiveData ? live!.top!.product : "Bamboo toothbrush"}
+                </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ fontFamily: FONT.display, fontSize: 22, color: "#fff", letterSpacing: -0.5 }}>1.2M</Text>
-                <Text style={{ fontFamily: FONT.mono, fontSize: 8, color: "rgba(255,255,255,0.8)", letterSpacing: 0.6, marginTop: 3 }}>5.8% ENG</Text>
+                <Text style={{ fontFamily: FONT.display, fontSize: 22, color: "#fff", letterSpacing: -0.5 }}>
+                  {hasLiveData ? fmtCompact(live!.top!.views) : "1.2M"}
+                </Text>
+                <Text style={{ fontFamily: FONT.mono, fontSize: 8, color: "rgba(255,255,255,0.8)", letterSpacing: 0.6, marginTop: 3 }}>
+                  {hasLiveData ? `${live!.top!.engagementPct.toFixed(1)}% ENG` : "5.8% ENG"}
+                </Text>
               </View>
             </View>
           </LinearGradient>
@@ -136,9 +182,13 @@ export default function InsightsScreen() {
             <Text style={{ fontSize: 15 }}>💡</Text>
           </View>
           <Text style={{ flex: 1, fontFamily: FONT.sans, fontSize: 12.5, color: theme.ink2, lineHeight: 19 }}>
-            {lang === "en"
-              ? "Hook 2 (Unboxing) underperforms on LinkedIn. Swap to Testimonial there — it lifts pro-audience engagement ~2.4×."
-              : "Hook 2 (Unboxing) lemah di LinkedIn. Ganti ke Testimoni di sana — naikkan engagement audiens pro ~2,4×."}
+            {hasLiveData
+              ? (lang === "en"
+                ? "Recommendations improve as more posts collect data — check back after your next campaign goes live."
+                : "Rekomendasi makin akurat seiring data terkumpul — cek lagi setelah kampanye berikutnya tayang.")
+              : (lang === "en"
+                ? "Hook 2 (Unboxing) underperforms on LinkedIn. Swap to Testimonial there — it lifts pro-audience engagement ~2.4×."
+                : "Hook 2 (Unboxing) lemah di LinkedIn. Ganti ke Testimoni di sana — naikkan engagement audiens pro ~2,4×.")}
           </Text>
         </GlassPanel>
       </ScrollView>
