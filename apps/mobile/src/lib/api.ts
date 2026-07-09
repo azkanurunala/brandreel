@@ -58,9 +58,16 @@ export async function apiDelete(path: string) {
 // Unggah file (form-data, field "file") — dipakai buat logo brand & foto
 // produk (Bab 03). JANGAN set Content-Type manual — fetch/browser yang
 // mengisi boundary multipart-nya sendiri.
-export async function apiUpload(path: string, file: { uri: string; name: string; type: string }) {
+// Native (RN fetch polyfill) butuh objek {uri,name,type}; browser beneran
+// butuh Blob/File asli — objek {uri,name,type} cuma jadi "[object Object]"
+// kalau di-append ke FormData browser, bikin backend nolak 400.
+export async function apiUpload(path: string, file: { uri: string; name: string; type: string } | File | Blob) {
   const form = new FormData();
-  form.append("file", { uri: file.uri, name: file.name, type: file.type } as any);
+  if (file instanceof Blob) {
+    form.append("file", file, "name" in file ? (file as File).name : "upload");
+  } else {
+    form.append("file", { uri: file.uri, name: file.name, type: file.type } as any);
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: await authHeaders(),

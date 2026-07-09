@@ -5,7 +5,7 @@
 // terpisah begitu worker/render selesai (lihat apps/api/src/worker.ts).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -121,6 +121,7 @@ export default function DetailScreen() {
   // memprosesnya di background).
   const [renders, setRenders] = useState<RenderRow[] | null>(null);
   const [generatingRender, setGeneratingRender] = useState(false);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
 
   const loadRenders = useCallback(async () => {
     if (!backendId) return;
@@ -236,7 +237,17 @@ export default function DetailScreen() {
         <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
           <View style={{ width: 108, aspectRatio: previewAspect, borderRadius: 14, overflow: "hidden" }}>
             {activeRender?.state === "ready" && activeRender.storageUrl ? (
-              <VideoView player={player} style={{ width: "100%", height: "100%" }} contentFit="cover" nativeControls={false} />
+              <Pressable onPress={() => setVideoModalOpen(true)} style={{ width: "100%", height: "100%" }}>
+                <VideoView player={player} style={{ width: "100%", height: "100%" }} contentFit="cover" nativeControls={false} />
+                <View style={{
+                  position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 999,
+                  backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+                  </Svg>
+                </View>
+              </Pressable>
             ) : (
               <LinearGradient
                 colors={[hk.color, c.logoColor]}
@@ -414,6 +425,28 @@ export default function DetailScreen() {
         hookRowId={aiHook?.id ?? null}
         onScheduled={() => { setSchedOpen(false); router.push("/schedule"); }}
       />
+
+      {activeRender?.state === "ready" && activeRender.storageUrl && (
+        <Modal visible={videoModalOpen} transparent animationType="fade" onRequestClose={() => setVideoModalOpen(false)}>
+          <Pressable onPress={() => setVideoModalOpen(false)}
+            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" }}>
+            <Pressable onPress={(e) => e.stopPropagation()}
+              style={{
+                width: Math.min(Dimensions.get("window").width * 0.92, previewAspect >= 1 ? 640 : 420),
+                aspectRatio: previewAspect, borderRadius: 16, overflow: "hidden",
+              }}>
+              <VideoView player={player} style={{ width: "100%", height: "100%" }} contentFit="contain" nativeControls />
+            </Pressable>
+            <Pressable onPress={() => setVideoModalOpen(false)}
+              style={{
+                position: "absolute", top: insets.top + 16, right: 20, width: 36, height: 36, borderRadius: 999,
+                backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
+              }}>
+              <Text style={{ color: "#fff", fontSize: 18 }}>✕</Text>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </BrAppShell>
   );
 }
