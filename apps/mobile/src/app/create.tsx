@@ -2,8 +2,8 @@
 // Fase 3: submit membuat Campaign asli di backend lalu memanggil
 // /campaigns/:id/generate (Claude) — promise-nya ditunggu di layar generating.
 
-import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,7 +14,8 @@ import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { setPendingCampaign, setPendingBackend, type GenerateResult } from "@/data/pendingCampaign";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { pickAndUploadImage } from "@/lib/imageUpload";
 
 function Label({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -28,12 +29,33 @@ export default function CreateScreen() {
   const { theme, lang, t, persona } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const voice = lang === "en" ? persona.voice_en : persona.voice_id;
 
   const [product, setProduct] = useState("");
   const [desc, setDesc] = useState("");
   const [logoColor, setLogoColor] = useState(theme.brand);
   const [plats, setPlats] = useState<PlatformId[]>(persona.platforms as PlatformId[]);
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [brandVoice, setBrandVoice] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet("/brand-kit").then((kit) => {
+      if (kit?.colors?.[0]) setLogoColor(kit.colors[0]);
+      if (kit?.voice) setBrandVoice(kit.voice);
+    }).catch(() => {});
+  }, []);
+
+  const voice = brandVoice ?? (lang === "en" ? "Not set yet" : "Belum diatur");
+
+  async function handlePickProductImage() {
+    setImageUploading(true);
+    try {
+      const url = await pickAndUploadImage();
+      if (url) setProductImageUrl(url);
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   const logoColors = [theme.brand, "#1FA971", "#2D7FF0", "#6D4AFF", "#E0A11B"];
   const ready = product.trim().length > 1 && plats.length > 0;
@@ -64,6 +86,7 @@ export default function CreateScreen() {
         const campaign = await apiPost("/campaigns", {
           product: productName,
           description: desc.trim() || undefined,
+          productImageUrl: productImageUrl ?? undefined,
           platforms: plats,
         });
         createdId = campaign.id;
@@ -162,10 +185,31 @@ export default function CreateScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink }}>{voice}</Text>
             <Text style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 0.6, marginTop: 2, textTransform: "uppercase" }}>
-              {lang === "en" ? "FROM BRAND KIT" : "DARI BRAND KIT"}
+              {brandVoice
+                ? (lang === "en" ? "FROM BRAND KIT" : "DARI BRAND KIT")
+                : (lang === "en" ? "SET IT IN PROFILE → BRAND KIT" : "ATUR DI PROFIL → BRAND KIT")}
             </Text>
           </View>
         </GlassPanel>
+
+        {/* Foto produk (opsional) */}
+        <Label color={theme.ink3}>{lang === "en" ? "Product photo (optional)" : "Foto produk (opsional)"}</Label>
+        <Pressable onPress={handlePickProductImage} disabled={imageUploading}
+          style={({ pressed }) => ({
+            borderWidth: 1, borderStyle: "dashed", borderColor: theme.hair, backgroundColor: theme.glassHi,
+            borderRadius: 13, height: productImageUrl ? 140 : 64, alignItems: "center", justifyContent: "center",
+            overflow: "hidden", transform: [{ scale: pressed ? 0.99 : 1 }],
+          })}>
+          {imageUploading ? (
+            <ActivityIndicator color={theme.brand} />
+          ) : productImageUrl ? (
+            <Image source={{ uri: productImageUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+          ) : (
+            <Text style={{ fontFamily: FONT.sansSemi, fontSize: 12.5, color: theme.ink2 }}>
+              {lang === "en" ? "+ Upload a product photo" : "+ Unggah foto produk"}
+            </Text>
+          )}
+        </Pressable>
 
         {/* Platform tujuan */}
         <Label color={theme.ink3}>{t.create.platforms} · {plats.length}</Label>

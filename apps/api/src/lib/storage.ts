@@ -1,5 +1,6 @@
-// src/lib/storage.ts — unggah video hasil render ke object storage S3-kompatibel
-// (Cloudflare R2 / AWS S3) lalu kembalikan URL publik lewat CDN (Bab 03).
+// src/lib/storage.ts — unggah file (video hasil render, logo brand, foto
+// produk) ke object storage S3-kompatibel (Cloudflare R2 / AWS S3) lalu
+// kembalikan URL publik lewat CDN (Bab 03).
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { env } from "../env.js";
 
@@ -24,7 +25,7 @@ function client(): S3Client {
   });
 }
 
-export async function uploadVideo(key: string, bytes: Buffer, contentType = "video/mp4"): Promise<string> {
+async function upload(key: string, bytes: Buffer, contentType: string): Promise<string> {
   const s3 = client();
   await s3.send(new PutObjectCommand({
     Bucket: env.STORAGE_BUCKET,
@@ -34,4 +35,12 @@ export async function uploadVideo(key: string, bytes: Buffer, contentType = "vid
   }));
   const base = env.CDN_BASE_URL ?? `${env.STORAGE_ENDPOINT}/${env.STORAGE_BUCKET}`;
   return `${base.replace(/\/$/, "")}/${key}`;
+}
+
+export async function uploadVideo(key: string, bytes: Buffer, contentType = "video/mp4"): Promise<string> {
+  return upload(key, bytes, contentType);
+}
+
+export async function uploadImage(key: string, bytes: Buffer, contentType: string): Promise<string> {
+  return upload(key, bytes, contentType);
 }

@@ -1,8 +1,9 @@
 // Onboarding 5 langkah — porting BrOnboard dari prototype br-screens-onboard.jsx.
 // Fase 2: koneksi channel & SSO disimulasikan (sheet OAuth asli dipasang Fase 4).
 
-import React, { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,8 +15,16 @@ import { GlassPanel } from "@/components/br/Glass";
 import { BrandGlyph, PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { loginWithGoogle } from "@/lib/googleAuth";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { pickAndUploadImage } from "@/lib/imageUpload";
+import { toFrontendPlatform } from "@/lib/campaignView";
 
 const STEPS = 5;
+
+// Enum backend/Prisma pakai "x"; frontend pakai "twitter" (sesuai prototype).
+function toBackendPlatform(pid: PlatformId): string {
+  return pid === "twitter" ? "x" : pid;
+}
 
 // Baris tombol SSO Google/Apple — Google jalan lewat OAuth asli
 // (lib/googleAuth.ts); Apple belum diimplementasi server-side, jadi jujur
@@ -80,17 +89,83 @@ export default function OnboardScreen() {
   const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState(0);
-  const [conn, setConn] = useState<Record<PlatformId, boolean>>({
-    tiktok: true, instagram: true, youtube: false, linkedin: false, twitter: false, facebook: false,
-  });
-  const [brandName, setBrandName] = useState("Eco Goods");
-  const [logoColor, setLogoColor] = useState("#1FA971");
-  const [voice, setVoice] = useState<string[]>(["casual", "eco"]);
+  const [connections, setConnections] = useState<{ platform: string }[] | null>(null);
+  const [connecting, setConnecting] = useState<PlatformId | null>(null);
+  const [brandName, setBrandName] = useState("");
+  const [logoColor, setLogoColor] = useState(theme.brand);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [voice, setVoice] = useState<string[]>([]);
+  const [savingKit, setSavingKit] = useState(false);
 
-  const connectedCount = Object.values(conn).filter(Boolean).length;
+  const loadConnections = useCallback(async () => {
+    try { setConnections(await apiGet("/connections")); }
+    catch { setConnections([]); }
+  }, []);
+  useEffect(() => { if (step === 2) loadConnections(); }, [step, loadConnections]);
+
+  // Brand kit yang sudah ada (kalau pengguna pernah mengisinya) — jangan
+  // pura-pura kosong kalau sebenarnya sudah pernah disimpan.
+  useEffect(() => {
+    apiGet("/brand-kit").then((kit) => {
+      if (!kit) return;
+      setBrandName(kit.name ?? "");
+      if (kit.logoUrl) setLogoUrl(kit.logoUrl);
+      if (kit.colors?.[0]) setLogoColor(kit.colors[0]);
+      if (kit.voice) setVoice(kit.voice.split(",").filter(Boolean));
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handlePickLogo() {
+    setLogoUploading(true);
+    try {
+      const url = await pickAndUploadImage();
+      if (url) setLogoUrl(url);
+    } catch (e: any) {
+      Alert.alert(lang === "en" ? "Upload failed" : "Gagal unggah", e.message ?? String(e));
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
+  async function saveBrandKit() {
+    setSavingKit(true);
+    try {
+      await apiPut("/brand-kit", {
+        name: brandName.trim() || "My Brand",
+        voice: voice.join(","),
+        logoUrl: logoUrl ?? undefined,
+        colors: [logoColor],
+      });
+    } catch (e: any) {
+      console.warn("gagal simpan brand kit:", e);
+    } finally {
+      setSavingKit(false);
+    }
+  }
+
+  async function toggleConnect(pid: PlatformId) {
+    setConnecting(pid);
+    try {
+      const { consentUrl } = await apiPost(`/auth/${toBackendPlatform(pid)}/start`, {});
+      const result = await WebBrowser.openAuthSessionAsync(consentUrl, "brandreel://oauth-callback");
+      if (result.type === "success" && result.url.includes("status=error")) {
+        Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", pid);
+      }
+      await loadConnections();
+    } catch (e: any) {
+      Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", e.message ?? String(e));
+    } finally {
+      setConnecting(null);
+    }
+  }
+
+  const connectedIds = (connections ?? []).map((c) => toFrontendPlatform(c.platform));
+  const connectedCount = connectedIds.length;
   const next = () => setStep((s) => Math.min(STEPS - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
-  const finish = () => router.replace("/home");
+  const finish = async () => { await saveBrandKit(); router.replace("/home"); };
   const toLogin = () => router.replace("/login");
 
   const voiceOpts = [
@@ -183,45 +258,53 @@ export default function OnboardScreen() {
                 ? "OAuth-secure. We refresh tokens 7 days before they expire — so posts never fail silently."
                 : "Aman dengan OAuth. Token disegarkan 7 hari sebelum kedaluwarsa — posting tak pernah gagal diam-diam."}
             </Text>
-            <View style={{ gap: 9 }}>
-              {BR_PLATFORM_ORDER.map((pid) => {
-                const p = BR_PLATFORMS[pid];
-                const on = conn[pid];
-                return (
-                  <Pressable key={pid} onPress={() => setConn((c) => ({ ...c, [pid]: !on }))}
-                    style={({ pressed }) => ({
-                      borderWidth: 1, borderColor: on ? p.color + "66" : theme.hair,
-                      backgroundColor: on ? p.color + "12" : theme.glassHi,
-                      borderRadius: 14, paddingVertical: 11, paddingHorizontal: 13,
-                      flexDirection: "row" as const, alignItems: "center" as const, gap: 12,
-                      transform: [{ scale: pressed ? 0.985 : 1 }],
-                    })}>
-                    <PlatformBadge pid={pid} size={34} solid={on} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: FONT.sansBold, fontSize: 14, color: theme.ink }}>{p.name}</Text>
-                      <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.6, marginTop: 2, textTransform: "uppercase" }}>
-                        {p.ratio} · {p.maxSec}s max
-                      </Text>
-                    </View>
-                    <View style={{
-                      paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999,
-                      backgroundColor: on ? p.color : "transparent",
-                      borderWidth: on ? 0 : 1, borderColor: theme.hair,
-                      flexDirection: "row", alignItems: "center", gap: 5,
-                    }}>
-                      {on && (
-                        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.4} strokeLinecap="round">
-                          <Path d="M4 12l5 5L20 6" />
-                        </Svg>
-                      )}
-                      <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, letterSpacing: 0.8, color: on ? "#fff" : theme.ink2 }}>
-                        {(on ? t.profile.connected : t.onboard.connect).toUpperCase()}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {connections === null ? (
+              <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                <ActivityIndicator color={theme.brand} />
+              </View>
+            ) : (
+              <View style={{ gap: 9 }}>
+                {BR_PLATFORM_ORDER.map((pid) => {
+                  const p = BR_PLATFORMS[pid];
+                  const on = connectedIds.includes(pid);
+                  const busy = connecting === pid;
+                  return (
+                    <Pressable key={pid} onPress={() => !on && toggleConnect(pid)} disabled={on || busy}
+                      style={({ pressed }) => ({
+                        borderWidth: 1, borderColor: on ? p.color + "66" : theme.hair,
+                        backgroundColor: on ? p.color + "12" : theme.glassHi,
+                        borderRadius: 14, paddingVertical: 11, paddingHorizontal: 13,
+                        flexDirection: "row" as const, alignItems: "center" as const, gap: 12,
+                        opacity: busy ? 0.6 : 1,
+                        transform: [{ scale: pressed ? 0.985 : 1 }],
+                      })}>
+                      <PlatformBadge pid={pid} size={34} solid={on} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: FONT.sansBold, fontSize: 14, color: theme.ink }}>{p.name}</Text>
+                        <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.6, marginTop: 2, textTransform: "uppercase" }}>
+                          {p.ratio} · {p.maxSec}s max
+                        </Text>
+                      </View>
+                      <View style={{
+                        paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999,
+                        backgroundColor: on ? p.color : "transparent",
+                        borderWidth: on ? 0 : 1, borderColor: theme.hair,
+                        flexDirection: "row", alignItems: "center", gap: 5,
+                      }}>
+                        {on && (
+                          <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.4} strokeLinecap="round">
+                            <Path d="M4 12l5 5L20 6" />
+                          </Svg>
+                        )}
+                        <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, letterSpacing: 0.8, color: on ? "#fff" : theme.ink2 }}>
+                          {busy ? "···" : (on ? t.profile.connected : t.onboard.connect).toUpperCase()}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
             <Text style={{ fontFamily: FONT.mono, fontSize: 10, color: theme.ink3, letterSpacing: 1, textAlign: "center", marginTop: 16, textTransform: "uppercase" }}>
               {connectedCount}/{BR_PLATFORM_ORDER.length} {lang === "en" ? "connected" : "terhubung"}
             </Text>
@@ -241,20 +324,35 @@ export default function OnboardScreen() {
             </Text>
 
             <View style={{ flexDirection: "row", gap: 13, alignItems: "center" }}>
-              <View style={{ width: 60, height: 60, borderRadius: 17, backgroundColor: logoColor, alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ fontFamily: FONT.display, color: "#fff", fontSize: 24, letterSpacing: -0.5 }}>
-                  {(brandName[0] || "B").toUpperCase()}
-                </Text>
-              </View>
+              <Pressable onPress={handlePickLogo} disabled={logoUploading}
+                style={{
+                  width: 60, height: 60, borderRadius: 17, backgroundColor: logoColor,
+                  alignItems: "center", justifyContent: "center", overflow: "hidden",
+                }}>
+                {logoUploading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : logoUrl ? (
+                  <Image source={{ uri: logoUrl }} style={{ width: 60, height: 60 }} resizeMode="cover" />
+                ) : (
+                  <Text style={{ fontFamily: FONT.display, color: "#fff", fontSize: 24, letterSpacing: -0.5 }}>
+                    {(brandName[0] || "+").toUpperCase()}
+                  </Text>
+                )}
+              </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 5 }}>
                   {lang === "en" ? "Brand name" : "Nama brand"}
                 </Text>
                 <TextInput value={brandName} onChangeText={setBrandName}
+                  placeholder={lang === "en" ? "Your brand name" : "Nama brand kamu"}
+                  placeholderTextColor={theme.ink3}
                   style={{
                     backgroundColor: theme.glassHi, borderWidth: 1, borderColor: theme.hair, borderRadius: 12,
                     paddingVertical: 11, paddingHorizontal: 13, fontFamily: FONT.sansSemi, fontSize: 15, color: theme.ink,
                   }} />
+                <Text style={{ fontFamily: FONT.sans, fontSize: 10.5, color: theme.ink3, marginTop: 5 }}>
+                  {lang === "en" ? "Tap the square to upload a logo" : "Ketuk kotak untuk unggah logo"}
+                </Text>
               </View>
             </View>
 
@@ -310,26 +408,31 @@ export default function OnboardScreen() {
             </Text>
             <Text style={{ fontFamily: FONT.sans, fontSize: 14, color: theme.ink2, marginTop: 12, lineHeight: 21, maxWidth: 290, textAlign: "center" }}>
               {lang === "en"
-                ? `${connectedCount} channels connected · ${brandName} brand kit saved. Create your first campaign in under 5 minutes.`
-                : `${connectedCount} channel terhubung · brand kit ${brandName} tersimpan. Buat kampanye pertama dalam 5 menit.`}
+                ? `${connectedCount} channels connected. Create your first campaign in under 5 minutes.`
+                : `${connectedCount} channel terhubung. Buat kampanye pertama dalam 5 menit.`}
             </Text>
           </View>
         )}
       </ScrollView>
 
-      {/* Navigasi bawah */}
-      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 22, paddingTop: 10, paddingBottom: 16 + insets.bottom }}>
-        {step > 0 && step < STEPS - 1 && (
-          <GhostButton theme={theme} onPress={back} style={{ paddingHorizontal: 18 }}>{t.onboard.back}</GhostButton>
-        )}
-        {step < STEPS - 1 ? (
-          <PrimaryButton theme={theme} onPress={next} style={{ flex: 1 }}>
-            {step === 0 ? t.onboard.getStarted : step === 2 ? `${t.onboard.continue} · ${connectedCount}/${BR_PLATFORM_ORDER.length}` : t.onboard.continue}
-          </PrimaryButton>
-        ) : (
-          <PrimaryButton theme={theme} onPress={finish} style={{ flex: 1 }}>{t.onboard.finish} →</PrimaryButton>
-        )}
-      </View>
+      {/* Navigasi bawah — step 0 gak punya tombol di sini: SSORow di atas
+          satu-satunya jalan maju, biar orang gak bisa lewat tanpa login
+          beneran (bug lama: tombol generik ini manggil next() apa pun
+          status loginnya). */}
+      {step > 0 && (
+        <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 22, paddingTop: 10, paddingBottom: 16 + insets.bottom }}>
+          {step < STEPS - 1 && (
+            <GhostButton theme={theme} onPress={back} style={{ paddingHorizontal: 18 }}>{t.onboard.back}</GhostButton>
+          )}
+          {step < STEPS - 1 ? (
+            <PrimaryButton theme={theme} onPress={next} style={{ flex: 1 }}>
+              {step === 2 ? `${t.onboard.continue} · ${connectedCount}/${BR_PLATFORM_ORDER.length}` : t.onboard.continue}
+            </PrimaryButton>
+          ) : (
+            <PrimaryButton theme={theme} onPress={finish} style={{ flex: 1 }}>{t.onboard.finish} →</PrimaryButton>
+          )}
+        </View>
+      )}
     </BrAppShell>
   );
 }

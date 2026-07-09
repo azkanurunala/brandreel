@@ -51,6 +51,7 @@ campaignsRouter.get("/campaigns/:id", requireAuth, async (req, res) => {
 const createSchema = z.object({
   product: z.string().min(1),
   description: z.string().optional(),
+  productImageUrl: z.string().url().optional(),
   platforms: z.array(z.string()).default([]),
   brandKitId: z.string().optional(),
 });

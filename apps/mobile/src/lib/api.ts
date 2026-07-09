@@ -38,10 +38,33 @@ export async function apiPost(path: string, body: unknown) {
   return handle(res, path);
 }
 
+export async function apiPut(path: string, body: unknown) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: await authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  return handle(res, path);
+}
+
 export async function apiDelete(path: string) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "DELETE",
     headers: await authHeaders(),
+  });
+  return handle(res, path);
+}
+
+// Unggah file (form-data, field "file") — dipakai buat logo brand & foto
+// produk (Bab 03). JANGAN set Content-Type manual — fetch/browser yang
+// mengisi boundary multipart-nya sendiri.
+export async function apiUpload(path: string, file: { uri: string; name: string; type: string }) {
+  const form = new FormData();
+  form.append("file", { uri: file.uri, name: file.name, type: file.type } as any);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: form,
   });
   return handle(res, path);
 }

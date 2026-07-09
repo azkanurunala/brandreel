@@ -166,6 +166,7 @@ model Campaign {
   brandKitId String?
   product    String
   description String?
+  productImageUrl String?                          // foto produk opsional (Bab 03)
   platforms  Platform[]                            // platform tujuan
   status     CampaignStatus @default(draft)
   topHook    String?                               // hook terbaik (dari insights)
