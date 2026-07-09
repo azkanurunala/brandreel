@@ -2,17 +2,17 @@
 // br-screens-schedule.jsx: hero hitung mundur, strip 7 hari, linimasa harian.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "@/context/BrContext";
 import { BR_HOOKS, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
-import {
-  BR_DOW, BR_MON, BR_SCHEDULE, brCampaignById, brFmtCountdown, brFmtTime, brSlotDate, brUserScheduled,
-} from "@/data/schedule";
+import { BR_DOW, BR_MON, brFmtCountdown, brFmtTime, brSlotDate } from "@/data/schedule";
 import type { Campaign } from "@/data/campaigns";
+import { apiGet } from "@/lib/api";
+import { toFrontendPlatform, toViewCampaign, type ApiCampaign } from "@/lib/campaignView";
 import { BrAppShell, BrAppHeader } from "@/components/br/AppChrome";
 import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
@@ -29,7 +29,13 @@ interface SlotPost {
   date: Date;
   ms: number;
   state: "posted" | "queued" | "scheduled" | "retry";
-  userAdded: boolean;
+}
+
+// Selisih hari kalender lokal antara `date` dan `now` (0 = hari ini).
+function dayOffset(date: Date, now: Date): number {
+  const a = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((a - b) / 86_400_000);
 }
 
 export default function ScheduleScreen() {
@@ -45,23 +51,37 @@ export default function ScheduleScreen() {
     return () => clearInterval(id);
   }, []);
 
+  // Data asli dari backend — GET /campaigns sudah menyertakan posts (dengan
+  // scheduledAt + hook) per kampanye milik akun yang login.
+  const [campaigns, setCampaigns] = useState<ApiCampaign[] | null>(null);
+  useEffect(() => {
+    apiGet("/campaigns").then(setCampaigns).catch(() => setCampaigns([]));
+  }, []);
+
   const posts: SlotPost[] = useMemo(() => {
-    const rows = [
-      ...BR_SCHEDULE.map((r) => ({ r, user: false })),
-      ...brUserScheduled().map((u) => ({ r: [u.off, u.h, u.m, u.cid, u.pid, u.hk] as const, user: true })),
-    ];
-    return rows
-      .map(({ r: [off, h, m, cid, pid, hk], user }): SlotPost | null => {
-        const c = brCampaignById(cid);
-        if (!c) return null;
-        const date = brSlotDate(now, off, h, m);
-        const past = date.getTime() <= now.getTime();
-        let state: SlotPost["state"] = past ? "posted" : "scheduled";
-        if (cid === "c-beeswax" && pid === "instagram" && !user) state = "retry";
-        return { off, h, m, cid, pid, hk, c, date, ms: date.getTime() - now.getTime(), state, userAdded: user };
-      })
-      .filter((p): p is SlotPost => p !== null);
-  }, [now]);
+    if (!campaigns) return [];
+    const rows: SlotPost[] = [];
+    for (const api of campaigns) {
+      const c = toViewCampaign(api);
+      for (const p of api.posts ?? []) {
+        if (!p.scheduledAt) continue;
+        const date = new Date(p.scheduledAt);
+        const off = dayOffset(date, now);
+        if (off < 0 || off > 6) continue;
+        const state: SlotPost["state"] =
+          p.state === "posted" ? "posted"
+          : p.state === "retry" || p.state === "failed" ? "retry"
+          : date.getTime() > now.getTime() ? "scheduled"
+          : "queued";
+        rows.push({
+          off, h: date.getHours(), m: date.getMinutes(),
+          cid: api.id, pid: toFrontendPlatform(p.platform), hk: (p.hook?.label as HookId) ?? "h1",
+          c, date, ms: date.getTime() - now.getTime(), state,
+        });
+      }
+    }
+    return rows;
+  }, [campaigns, now]);
 
   const upcoming = posts.filter((p) => p.ms > 0 && p.state !== "retry").sort((a, b) => a.ms - b.ms);
   const next = upcoming[0] ?? null;
@@ -222,7 +242,11 @@ export default function ScheduleScreen() {
         </View>
 
         {/* Linimasa harian */}
-        {dayPosts.length === 0 ? (
+        {campaigns === null ? (
+          <View style={{ paddingVertical: 24, alignItems: "center" }}>
+            <ActivityIndicator color={theme.brand} />
+          </View>
+        ) : dayPosts.length === 0 ? (
           <GlassPanel theme={theme} padding={22} style={{ alignItems: "center" }}>
             <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink2 }}>
               {en ? "No posts scheduled." : "Belum ada jadwal."}
@@ -265,8 +289,8 @@ export default function ScheduleScreen() {
                       style={({ pressed }) => ({
                         flex: 1, minWidth: 0,
                         borderWidth: 1,
-                        borderColor: isNext ? theme.brand + "55" : p.userAdded ? theme.brand + "4A" : theme.hair,
-                        backgroundColor: p.userAdded ? theme.brand + "0D" : theme.glassHi,
+                        borderColor: isNext ? theme.brand + "55" : theme.hair,
+                        backgroundColor: theme.glassHi,
                         borderRadius: 14, paddingVertical: 10, paddingHorizontal: 11,
                         flexDirection: "row" as const, alignItems: "center" as const, gap: 11,
                         transform: [{ scale: pressed ? 0.985 : 1 }],
@@ -277,13 +301,6 @@ export default function ScheduleScreen() {
                           <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: FONT.sansBold, fontSize: 13.5, color: theme.ink }}>
                             {p.c.product}
                           </Text>
-                          {p.userAdded && p.state !== "posted" && (
-                            <View style={{ backgroundColor: theme.brand, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 6 }}>
-                              <Text style={{ fontFamily: FONT.monoSemi, fontSize: 7.5, letterSpacing: 0.7, color: "#fff" }}>
-                                {en ? "NEW" : "BARU"}
-                              </Text>
-                            </View>
-                          )}
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 }}>
                           <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: hook.color }} />

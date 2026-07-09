@@ -2,7 +2,7 @@
 // Fase 2: koneksi channel & SSO disimulasikan (sheet OAuth asli dipasang Fase 4).
 
 import React, { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,26 +13,53 @@ import { BrAppShell, GhostButton, PrimaryButton } from "@/components/br/AppChrom
 import { GlassPanel } from "@/components/br/Glass";
 import { BrandGlyph, PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
+import { loginWithGoogle } from "@/lib/googleAuth";
 
 const STEPS = 5;
 
-// Baris tombol SSO Google/Apple (padanan BrSSORow — versi sederhana Fase 2).
-function SSORow({ onPick }: { onPick: (id: "google" | "apple") => void }) {
+// Baris tombol SSO Google/Apple — Google jalan lewat OAuth asli
+// (lib/googleAuth.ts); Apple belum diimplementasi server-side, jadi jujur
+// bilang belum tersedia daripada pura-pura berhasil.
+function SSORow({ onSuccess }: { onSuccess: () => void }) {
   const { theme, lang } = useBr();
+  const [busy, setBusy] = useState<"google" | null>(null);
+
+  async function onPick(id: "google" | "apple") {
+    if (id === "apple") {
+      Alert.alert(
+        lang === "en" ? "Not available yet" : "Belum tersedia",
+        lang === "en" ? "Apple Sign-In isn't wired up on the server yet — use Google for now." : "Apple Sign-In belum disambungkan di server — pakai Google dulu."
+      );
+      return;
+    }
+    setBusy("google");
+    try {
+      const ok = await loginWithGoogle();
+      if (ok) onSuccess();
+      else Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", lang === "en" ? "Try again." : "Coba lagi.");
+    } catch (e: any) {
+      Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", e.message ?? String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <View style={{ gap: 9 }}>
       {(["google", "apple"] as const).map((id) => {
         const s = BR_SSO[id];
+        const isBusy = busy === id;
         return (
-          <Pressable key={id} onPress={() => onPick(id)}
+          <Pressable key={id} onPress={() => onPick(id)} disabled={isBusy}
             style={({ pressed }) => ({
               backgroundColor: s.bg,
               borderWidth: s.bordered ? 1 : 0, borderColor: theme.hair,
               borderRadius: 13, paddingVertical: 12, paddingHorizontal: 16,
               flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "center" as const, gap: 10,
+              opacity: isBusy ? 0.7 : 1,
               transform: [{ scale: pressed ? 0.975 : 1 }],
             })}>
-            <BrandGlyph pid={id} size={18} color={s.ink} />
+            {isBusy ? <ActivityIndicator size="small" color={s.ink} /> : <BrandGlyph pid={id} size={18} color={s.ink} />}
             <Text style={{ fontFamily: FONT.sansBold, fontSize: 14, color: s.ink }}>
               {lang === "en" ? `Continue with ${s.name}` : `Lanjut dengan ${s.name}`}
             </Text>
@@ -105,7 +132,7 @@ export default function OnboardScreen() {
                 : "Ubah 10 jam bikin UGC jadi input 5 menit. Cukup nama produk + logo — kami buat, format, dan posting otomatis ke mana-mana."}
             </Text>
             <View style={{ width: "100%", marginTop: 26 }}>
-              <SSORow onPick={() => finish()} />
+              <SSORow onSuccess={next} />
             </View>
             <Pressable onPress={toLogin} style={{ alignSelf: "center", marginTop: 18 }}>
               <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink2 }}>

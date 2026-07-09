@@ -1,17 +1,19 @@
 // Beranda / dashboard — porting BrHome dari prototype assets/br-screens-home.jsx.
 
-import React from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr, brStatusMeta } from "@/context/BrContext";
 import { brGreet, type TimeKey } from "@/i18n/strings";
-import { BR_CAMPAIGNS, type Campaign } from "@/data/campaigns";
+import { type Campaign } from "@/data/campaigns";
 import { BrAppShell, PlatformDots } from "@/components/br/AppChrome";
 import { BrandMark, GlassChip, GlassPanel } from "@/components/br/Glass";
 import { FONT } from "@/components/br/fonts";
+import { apiGet } from "@/lib/api";
+import { toViewCampaign, type ApiCampaign } from "@/lib/campaignView";
 
 function timeKeyNow(): TimeKey {
   const h = new Date().getHours();
@@ -91,7 +93,17 @@ export default function HomeScreen() {
     { v: scenario.reach, l: t.home.reach },
   ];
 
-  const campaigns = BR_CAMPAIGNS;
+  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const loadCampaigns = useCallback(async () => {
+    try {
+      const list: ApiCampaign[] = await apiGet("/campaigns");
+      setCampaigns(list.map(toViewCampaign));
+    } catch (e) {
+      console.warn("gagal ambil /campaigns:", e);
+      setCampaigns([]);
+    }
+  }, []);
+  useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
   function openCampaign(c: Campaign) {
     if (c.status === "draft") router.push("/create");
@@ -181,7 +193,7 @@ export default function HomeScreen() {
         {/* Daftar kampanye */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 18, paddingHorizontal: 4, paddingBottom: 8 }}>
           <Text style={{ fontFamily: FONT.mono, fontSize: 10, letterSpacing: 2.2, textTransform: "uppercase", color: theme.ink3 }}>
-            {t.home.recent} · {campaigns.length}
+            {t.home.recent} · {campaigns?.length ?? 0}
           </Text>
           {persona.can.multiBrand && (
             <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: theme.accent, letterSpacing: 1 }}>
@@ -190,11 +202,23 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <View style={{ gap: 9 }}>
-          {campaigns.map((c) => (
-            <CampaignCard key={c.id} c={c} onPress={() => openCampaign(c)} />
-          ))}
-        </View>
+        {campaigns === null ? (
+          <View style={{ paddingVertical: 24, alignItems: "center" }}>
+            <ActivityIndicator color={theme.brand} />
+          </View>
+        ) : campaigns.length === 0 ? (
+          <GlassPanel theme={theme} padding={16} tone="solid">
+            <Text style={{ fontFamily: FONT.sans, fontSize: 12.5, color: theme.ink2, lineHeight: 18 }}>
+              {lang === "en" ? "No campaigns yet — create your first one above." : "Belum ada kampanye — buat yang pertama di atas."}
+            </Text>
+          </GlassPanel>
+        ) : (
+          <View style={{ gap: 9 }}>
+            {campaigns.map((c) => (
+              <CampaignCard key={c.id} c={c} onPress={() => openCampaign(c)} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </BrAppShell>
   );

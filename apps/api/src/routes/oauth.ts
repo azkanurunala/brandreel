@@ -6,7 +6,6 @@
 // sebentar bareng state.
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
-import { z } from "zod";
 import { prisma } from "../db.js";
 import { encryptTokenRef, decryptTokenRef } from "../lib/vault.js";
 import { buildTikTokAuthorizeUrl, exchangeTikTokCode, refreshTikTokToken } from "../lib/tiktok.js";
@@ -14,6 +13,7 @@ import { buildMetaAuthorizeUrl, exchangeMetaCode } from "../lib/meta.js";
 import { buildGoogleAuthorizeUrl, exchangeGoogleCode, refreshGoogleToken, fetchYouTubeChannelId } from "../lib/google.js";
 import { buildLinkedInAuthorizeUrl, exchangeLinkedInCode, fetchLinkedInMemberId } from "../lib/linkedin.js";
 import { buildXAuthorizeUrl, exchangeXCode, fetchXUserId, generatePkce } from "../lib/x.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const oauthRouter = Router();
 
@@ -28,18 +28,16 @@ function cleanupExpiredState() {
   for (const [k, v] of pendingState) if (now - v.createdAt > STATE_TTL_MS) pendingState.delete(k);
 }
 
-const startSchema = z.object({ accountId: z.string() });
-
 // POST /auth/:platform/start — bikin state, balas URL izin platform
-oauthRouter.post("/auth/:platform/start", (req, res) => {
+// (accountId dari sesi login, BUKAN dari body — cegah orang mulai OAuth
+// atas nama akun orang lain)
+oauthRouter.post("/auth/:platform/start", requireAuth, (req, res) => {
   const platform = req.params.platform;
-  const parsed = startSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   cleanupExpiredState();
   const state = randomBytes(24).toString("hex");
   const entry: { accountId: string; platform: string; createdAt: number; pkceVerifier?: string } = {
-    accountId: parsed.data.accountId, platform, createdAt: Date.now(),
+    accountId: req.accountId!, platform, createdAt: Date.now(),
   };
 
   try {
@@ -175,9 +173,9 @@ oauthRouter.get("/auth/:platform/callback", async (req, res) => {
 });
 
 // POST /connections/:id/refresh — perpanjang token sebelum kedaluwarsa (Bab 04 §4)
-oauthRouter.post("/connections/:id/refresh", async (req, res) => {
+oauthRouter.post("/connections/:id/refresh", requireAuth, async (req, res) => {
   const conn = await prisma.connection.findUnique({ where: { id: req.params.id } });
-  if (!conn) return res.status(404).json({ error: "Koneksi tidak ditemukan" });
+  if (!conn || conn.accountId !== req.accountId) return res.status(404).json({ error: "Koneksi tidak ditemukan" });
 
   try {
     let tokenRef: string;

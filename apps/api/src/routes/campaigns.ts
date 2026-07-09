@@ -1,54 +1,74 @@
 // src/routes/campaigns.ts — CRUD campaign dasar (Bab 07)
+// Semua route di sini butuh sesi login (requireAuth) dan discope ke
+// req.accountId — satu akun cuma bisa lihat/ubah campaign miliknya sendiri.
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { callClaude, parseModelJSON } from "../lib/anthropic.js";
 import { HOOK_BRIEF, platformRule } from "../lib/hooks.js";
+import { requireAuth } from "../middleware/auth.js";
 
 type HookKey = "h1" | "h2" | "h3" | "h4" | "h5";
 const HOOK_KEYS: HookKey[] = ["h1", "h2", "h3", "h4", "h5"];
 
 export const campaignsRouter = Router();
 
-// GET /campaigns — daftar campaign
-campaignsRouter.get("/campaigns", async (_req, res) => {
+// NB: requireAuth dipasang PER RUTE (bukan campaignsRouter.use(requireAuth))
+// — semua router di app ini di-mount di root ("/"), jadi router.use() tanpa
+// path akan mencegat SEMUA request yang lewat titik itu di middleware chain
+// app, termasuk rute publik router lain yang didaftar setelahnya (mis.
+// /auth/google-login/callback, /auth/:platform/callback dari OAuth
+// provider — itu butuh TETAP bisa diakses tanpa Authorization header).
+
+// GET /campaigns — daftar campaign MILIK akun yang login
+campaignsRouter.get("/campaigns", requireAuth, async (req, res) => {
   const items = await prisma.campaign.findMany({
+    where: { accountId: req.accountId },
     orderBy: { createdAt: "desc" },
-    include: { hooks: true, renders: true },
+    include: {
+      hooks: true,
+      renders: true,
+      posts: {
+        select: { platform: true, state: true, permalink: true, scheduledAt: true, hook: { select: { label: true } } },
+      },
+    },
   });
   res.json(items);
 });
 
-// GET /campaigns/:id
-campaignsRouter.get("/campaigns/:id", async (req, res) => {
+// GET /campaigns/:id — cuma boleh lihat campaign milik sendiri
+campaignsRouter.get("/campaigns/:id", requireAuth, async (req, res) => {
   const item = await prisma.campaign.findUnique({
     where: { id: req.params.id },
     include: { hooks: true, renders: true, posts: true },
   });
-  if (!item) return res.status(404).json({ error: "Campaign tidak ditemukan" });
+  if (!item || item.accountId !== req.accountId) return res.status(404).json({ error: "Campaign tidak ditemukan" });
   res.json(item);
 });
 
-// POST /campaigns — buat campaign
+// POST /campaigns — buat campaign milik akun yang login (accountId TIDAK
+// dari body lagi — cegah orang bikin campaign atas nama akun orang lain)
 const createSchema = z.object({
-  accountId: z.string(),
   product: z.string().min(1),
   description: z.string().optional(),
   platforms: z.array(z.string()).default([]),
   brandKitId: z.string().optional(),
 });
 
-campaignsRouter.post("/campaigns", async (req, res) => {
+campaignsRouter.post("/campaigns", requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const created = await prisma.campaign.create({
-    data: { ...parsed.data, platforms: parsed.data.platforms as any },
+    data: { ...parsed.data, platforms: parsed.data.platforms as any, accountId: req.accountId! },
   });
   res.status(201).json(created);
 });
 
 // GET /campaigns/:id/status — status posting per platform (Bab 05)
-campaignsRouter.get("/campaigns/:id/status", async (req, res) => {
+campaignsRouter.get("/campaigns/:id/status", requireAuth, async (req, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id }, select: { accountId: true } });
+  if (!campaign || campaign.accountId !== req.accountId) return res.status(404).json({ error: "Campaign tidak ditemukan" });
+
   const posts = await prisma.post.findMany({
     where: { campaignId: req.params.id },
     select: { platform: true, state: true, permalink: true, scheduledAt: true },
@@ -57,12 +77,12 @@ campaignsRouter.get("/campaigns/:id/status", async (req, res) => {
 });
 
 // POST /campaigns/:id/generate — Claude tulis 5 hook (naskah+caption) + hashtag (Bab 03)
-campaignsRouter.post("/campaigns/:id/generate", async (req, res) => {
+campaignsRouter.post("/campaigns/:id/generate", requireAuth, async (req, res) => {
   const campaign = await prisma.campaign.findUnique({
     where: { id: req.params.id },
     include: { brandKit: true },
   });
-  if (!campaign) return res.status(404).json({ error: "Campaign tidak ditemukan" });
+  if (!campaign || campaign.accountId !== req.accountId) return res.status(404).json({ error: "Campaign tidak ditemukan" });
 
   const lang: "en" | "id" = req.body?.lang === "en" ? "en" : "id";
   const voice = campaign.brandKit?.voice ?? "casual, friendly";
@@ -139,7 +159,7 @@ const adaptSchema = z.object({
   lang: z.enum(["en", "id"]).default("id"),
 });
 
-campaignsRouter.post("/campaigns/:id/adapt-caption", async (req, res) => {
+campaignsRouter.post("/campaigns/:id/adapt-caption", requireAuth, async (req, res) => {
   const parsed = adaptSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -147,7 +167,9 @@ campaignsRouter.post("/campaigns/:id/adapt-caption", async (req, res) => {
     where: { id: parsed.data.hookId },
     include: { campaign: { include: { brandKit: true } } },
   });
-  if (!hook || hook.campaignId !== req.params.id) return res.status(404).json({ error: "Hook tidak ditemukan" });
+  if (!hook || hook.campaignId !== req.params.id || hook.campaign.accountId !== req.accountId) {
+    return res.status(404).json({ error: "Hook tidak ditemukan" });
+  }
 
   const { platform, lang } = parsed.data;
   const voice = hook.campaign.brandKit?.voice ?? "casual, friendly";

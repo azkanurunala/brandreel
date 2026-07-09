@@ -1,9 +1,10 @@
 // Profil — porting BrProfile dari prototype assets/br-screens-insights.jsx.
-// Fase 4: "Tambah channel" memicu OAuth nyata utk semua 6 platform
-// (start -> consent browser -> callback backend -> Connection tersimpan
-// terenkripsi). Sheet paket/brand kit/tim menyusul (polish Fase 2 lanjutan).
+// Fase 4: "Akun terhubung" ditarik dari GET /connections nyata (bukan
+// persona.platforms dummy lagi) — "Tambah channel" memicu OAuth nyata utk
+// semua 6 platform (start -> consent browser -> callback backend ->
+// Connection tersimpan terenkripsi). Sheet paket/brand kit/tim menyusul.
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import { useRouter } from "expo-router";
@@ -18,6 +19,7 @@ import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { apiGet, apiPost } from "@/lib/api";
+import { clearToken } from "@/lib/session";
 
 const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok", "instagram", "youtube", "linkedin", "twitter", "facebook"];
 
@@ -25,15 +27,25 @@ const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok", "instagram", "youtube", "link
 function toBackendPlatform(pid: PlatformId): string {
   return pid === "twitter" ? "x" : pid;
 }
+function toFrontendPlatform(p: string): PlatformId {
+  return p === "x" ? "twitter" : (p as PlatformId);
+}
 
-const BR_TOKEN_STATUS: Record<string, { st: "ok" | "expiring"; note_en: string; note_id: string }> = {
-  tiktok: { st: "expiring", note_en: "expires in 24h · auto-refresh on", note_id: "kedaluwarsa 24j · auto-refresh aktif" },
-  instagram: { st: "ok", note_en: "valid · 58 days left", note_id: "valid · 58 hari lagi" },
-  youtube: { st: "ok", note_en: "valid · quota 42/50 today", note_id: "valid · kuota 42/50 hari ini" },
-  linkedin: { st: "ok", note_en: "session alive · refreshed", note_id: "sesi aktif · disegarkan" },
-  twitter: { st: "ok", note_en: "valid · 450/15m headroom", note_id: "valid · 450/15m tersisa" },
-  facebook: { st: "ok", note_en: "Page token valid · 60 days", note_id: "Token Page valid · 60 hari" },
-};
+interface LiveConnection {
+  id: string;
+  platform: string;
+  handle: string | null;
+  status: "active" | "expiring" | "expired" | "revoked";
+  expiresAt: string | null;
+}
+
+function connectionNote(c: LiveConnection, lang: "en" | "id"): string {
+  if (!c.expiresAt) return lang === "en" ? "connected" : "terhubung";
+  const daysLeft = Math.round((new Date(c.expiresAt).getTime() - Date.now()) / 86_400_000);
+  if (daysLeft <= 0) return lang === "en" ? "expired" : "kedaluwarsa";
+  if (daysLeft <= 3) return lang === "en" ? `expires in ${daysLeft}d` : `kedaluwarsa ${daysLeft}h lagi`;
+  return lang === "en" ? `valid · ${daysLeft} days left` : `valid · ${daysLeft} hari lagi`;
+}
 
 function Eyebrow({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -56,8 +68,21 @@ export default function ProfileScreen() {
   const { theme, lang, t, persona, setPersonaId } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [connections, setConnections] = useState<LiveConnection[] | null>(null);
   const [extra, setExtra] = useState<Record<string, boolean>>({});
   const [connecting, setConnecting] = useState<PlatformId | null>(null);
+
+  const loadConnections = useCallback(async () => {
+    try {
+      const list = await apiGet("/connections");
+      setConnections(list);
+    } catch (e) {
+      console.warn("gagal ambil /connections:", e);
+      setConnections([]);
+    }
+  }, []);
+
+  useEffect(() => { loadConnections(); }, [loadConnections]);
 
   async function handleConnect(pid: PlatformId) {
     if (!OAUTH_IMPLEMENTED.includes(pid)) {
@@ -67,14 +92,15 @@ export default function ProfileScreen() {
     }
     setConnecting(pid);
     try {
-      const account = await apiGet("/accounts/demo");
-      const { consentUrl } = await apiPost(`/auth/${toBackendPlatform(pid)}/start`, { accountId: account.id });
+      const { consentUrl } = await apiPost(`/auth/${toBackendPlatform(pid)}/start`, {});
       const result = await WebBrowser.openAuthSessionAsync(consentUrl, "brandreel://oauth-callback");
-      if (result.type === "success" && result.url.includes("status=ok")) {
-        setExtra((e) => ({ ...e, [pid]: true }));
-      } else if (result.type === "success" && result.url.includes("status=error")) {
+      if (result.type === "success" && result.url.includes("status=error")) {
         Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", pid);
       }
+      // Reload selalu — di web, redirect brandreel:// gak selalu terdeteksi
+      // sebagai "success" oleh openAuthSessionAsync, tapi koneksinya bisa
+      // saja sudah tersimpan di server (lihat callback HTML "berhasil").
+      await loadConnections();
     } catch (e: any) {
       Alert.alert(lang === "en" ? "Connection failed" : "Gagal terhubung", e.message ?? String(e));
     } finally {
@@ -82,11 +108,9 @@ export default function ProfileScreen() {
     }
   }
 
-  const connectedIds = [
-    ...persona.platforms,
-    ...BR_PLATFORM_ORDER.filter((p) => extra[p] && !persona.platforms.includes(p)),
-  ] as PlatformId[];
-  const available = BR_PLATFORM_ORDER.filter((p) => !connectedIds.includes(p));
+  const liveConnections = connections ?? [];
+  const connectedIds = liveConnections.map((c) => toFrontendPlatform(c.platform));
+  const available = BR_PLATFORM_ORDER.filter((p) => !connectedIds.includes(p) && !extra[p]);
   const usedPct = persona.posts_quota === Infinity ? 0.48 : persona.posts_used / persona.posts_quota;
   const veoPct = persona.veo_quota ? persona.veo_used / persona.veo_quota : 0;
 
@@ -157,43 +181,64 @@ export default function ProfileScreen() {
           />
         </GlassPanel>
 
-        {/* Akun terhubung */}
-        <Eyebrow color={theme.ink3}>{t.profile.accounts} · {connectedIds.length}</Eyebrow>
-        <GlassPanel theme={theme} padding={6} tone="solid">
-          {connectedIds.map((pid, i) => {
-            const p = BR_PLATFORMS[pid];
-            const tk = BR_TOKEN_STATUS[pid] ?? { st: "ok" as const, note_en: "valid · just connected", note_id: "valid · baru terhubung" };
-            const expiring = tk.st === "expiring";
-            return (
-              <View key={pid} style={{
-                flexDirection: "row", alignItems: "center", gap: 12,
-                paddingVertical: 10, paddingHorizontal: 10,
-                borderTopWidth: i ? 1 : 0, borderTopColor: theme.hair2,
-              }}>
-                <PlatformBadge pid={pid} size={32} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink }}>{p.name}</Text>
-                  <Text numberOfLines={1} style={{ fontFamily: FONT.mono, fontSize: 8.5, color: expiring ? theme.warn : theme.ink3, letterSpacing: 0.4, marginTop: 2, textTransform: "uppercase" }}>
-                    {lang === "en" ? tk.note_en : tk.note_id}
-                  </Text>
-                </View>
-                {expiring ? (
-                  <Pressable style={({ pressed }) => ({
-                    borderWidth: 1, borderColor: theme.warn, backgroundColor: theme.warn + "16",
-                    borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12,
-                    transform: [{ scale: pressed ? 0.95 : 1 }],
-                  })}>
-                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: theme.warn, letterSpacing: 0.6, textTransform: "uppercase" }}>
-                      ↻ {t.profile.expired}
+        {/* Akun terhubung — data nyata dari GET /connections */}
+        <Eyebrow color={theme.ink3}>{t.profile.accounts} · {liveConnections.length}</Eyebrow>
+        {connections === null ? (
+          <GlassPanel theme={theme} padding={16} tone="solid">
+            <Text style={{ fontFamily: FONT.mono, fontSize: 10, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>
+              {lang === "en" ? "Loading…" : "Memuat…"}
+            </Text>
+          </GlassPanel>
+        ) : liveConnections.length === 0 ? (
+          <GlassPanel theme={theme} padding={16} tone="solid">
+            <Text style={{ fontFamily: FONT.sans, fontSize: 12.5, color: theme.ink2, lineHeight: 18 }}>
+              {lang === "en" ? "No accounts connected yet — add one below." : "Belum ada akun terhubung — tambah di bawah."}
+            </Text>
+          </GlassPanel>
+        ) : (
+          <GlassPanel theme={theme} padding={6} tone="solid">
+            {liveConnections.map((c, i) => {
+              const pid = toFrontendPlatform(c.platform);
+              const p = BR_PLATFORMS[pid];
+              const expiring = c.status === "expiring" || c.status === "expired";
+              return (
+                <View key={c.id} style={{
+                  flexDirection: "row", alignItems: "center", gap: 12,
+                  paddingVertical: 10, paddingHorizontal: 10,
+                  borderTopWidth: i ? 1 : 0, borderTopColor: theme.hair2,
+                }}>
+                  <PlatformBadge pid={pid} size={32} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink }}>
+                      {p.name}{c.handle ? ` · ${c.handle}` : ""}
                     </Text>
-                  </Pressable>
-                ) : (
-                  <GlassChip theme={theme} color={theme.pos}>● {t.profile.connected}</GlassChip>
-                )}
-              </View>
-            );
-          })}
-        </GlassPanel>
+                    <Text numberOfLines={1} style={{ fontFamily: FONT.mono, fontSize: 8.5, color: expiring ? theme.warn : theme.ink3, letterSpacing: 0.4, marginTop: 2, textTransform: "uppercase" }}>
+                      {connectionNote(c, lang)}
+                    </Text>
+                  </View>
+                  {expiring ? (
+                    <Pressable
+                      onPress={async () => {
+                        try { await apiPost(`/connections/${c.id}/refresh`, {}); await loadConnections(); }
+                        catch (e: any) { Alert.alert(lang === "en" ? "Refresh failed" : "Gagal refresh", e.message ?? String(e)); }
+                      }}
+                      style={({ pressed }) => ({
+                        borderWidth: 1, borderColor: theme.warn, backgroundColor: theme.warn + "16",
+                        borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12,
+                        transform: [{ scale: pressed ? 0.95 : 1 }],
+                      })}>
+                      <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: theme.warn, letterSpacing: 0.6, textTransform: "uppercase" }}>
+                        ↻ {t.profile.expired}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <GlassChip theme={theme} color={theme.pos}>● {t.profile.connected}</GlassChip>
+                  )}
+                </View>
+              );
+            })}
+          </GlassPanel>
+        )}
 
         {/* Tambah channel — TikTok pakai OAuth nyata; lainnya simulasi sampai diimplementasi */}
         {available.length > 0 && (
@@ -335,7 +380,11 @@ export default function ProfileScreen() {
         </View>
 
         <View style={{ marginTop: 22 }}>
-          <GhostButton theme={theme} onPress={() => router.replace("/onboard")}>
+          <GhostButton theme={theme} onPress={async () => {
+            try { await apiPost("/auth/logout", {}); } catch { /* token mungkin sudah invalid — tetap lanjut hapus lokal */ }
+            await clearToken();
+            router.replace("/login");
+          }}>
             <Text style={{ color: theme.neg }}>{t.profile.signout}</Text>
           </GhostButton>
         </View>

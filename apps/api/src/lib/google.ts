@@ -85,3 +85,60 @@ export async function fetchYouTubeChannelId(accessToken: string): Promise<string
   if (!id) throw new Error("Channel YouTube tidak ditemukan untuk akun ini");
   return id;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Login BrandReel pakai akun Google (BEDA dari koneksi YouTube di atas —
+// ini identitas login BrandReel sendiri, bukan izin posting). Client
+// Google yang sama boleh punya banyak redirect URI terdaftar sekaligus.
+// ─────────────────────────────────────────────────────────────
+const LOGIN_SCOPES = "openid email profile";
+
+export function googleLoginRedirectUri(): string {
+  return `${env.APP_BASE_URL}/auth/google-login/callback`;
+}
+
+export function buildGoogleLoginAuthorizeUrl(state: string): string {
+  if (!env.GOOGLE_CLIENT_ID) throw new GoogleUnavailableError();
+  const params = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    redirect_uri: googleLoginRedirectUri(),
+    response_type: "code",
+    scope: LOGIN_SCOPES,
+    state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+export async function exchangeGoogleLoginCode(code: string): Promise<{ access_token: string }> {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new GoogleUnavailableError();
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: googleLoginRedirectUri(),
+      grant_type: "authorization_code",
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error_description ?? data.error ?? `Google login token error (${r.status})`);
+  return data;
+}
+
+export interface GoogleProfile {
+  email: string;
+  name: string | null;
+  picture: string | null;
+}
+
+export async function fetchGoogleProfile(accessToken: string): Promise<GoogleProfile> {
+  const r = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error?.message ?? `Google userinfo error (${r.status})`);
+  if (!data.email) throw new Error("Google tidak mengembalikan email");
+  return { email: data.email, name: data.name ?? null, picture: data.picture ?? null };
+}

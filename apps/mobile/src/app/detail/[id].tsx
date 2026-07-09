@@ -5,29 +5,22 @@
 // terpisah begitu worker/render selesai (lihat apps/api/src/worker.ts).
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr, brStatusMeta } from "@/context/BrContext";
 import { BR_HOOKS, BR_HOOK_ORDER, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
-import { BR_CAMPAIGNS, brBuildCaption, brPreflight, type Campaign } from "@/data/campaigns";
+import { brBuildCaption, brPreflight, type Campaign } from "@/data/campaigns";
 import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { toViewCampaign, hooksToGenerateResult, type ApiCampaign } from "@/lib/campaignView";
 import { BrAppShell, BrAppHeader, FloatingActionBar, GhostButton, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { ScheduleSheet } from "@/components/br/ScheduleSheet";
 import { FONT } from "@/components/br/fonts";
-
-function resolveCampaign(id: string | undefined): Campaign {
-  if (id === "__new") {
-    const p = getPendingCampaign();
-    if (p) return p.campaign;
-  }
-  return BR_CAMPAIGNS.find((c) => c.id === id) ?? BR_CAMPAIGNS[0];
-}
 
 function Eyebrow({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -43,26 +36,59 @@ export default function DetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const c = resolveCampaign(id);
-  const camPlatforms = (Object.keys(c.platforms).length
+  const isNew = id === "__new";
+  const pending = isNew ? getPendingCampaign() : null;
+
+  // Kampanye baru (belum lama dibuat): pakai data optimistik dari create.tsx.
+  // Kampanye lain: ambil dari backend nyata (GET /campaigns/:id) — bukan
+  // BR_CAMPAIGNS dummy lagi.
+  const [fetched, setFetched] = useState<{ campaign: Campaign; ai: GenerateResult | null } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (isNew || !id) return;
+    let alive = true;
+    apiGet(`/campaigns/${id}`)
+      .then((api: ApiCampaign) => {
+        if (!alive) return;
+        setFetched({ campaign: toViewCampaign(api), ai: hooksToGenerateResult(api.hooks) });
+      })
+      .catch(() => { if (alive) setLoadError(true); });
+    return () => { alive = false; };
+  }, [id, isNew]);
+
+  const c: Campaign | null = isNew ? (pending?.campaign ?? null) : fetched?.campaign ?? null;
+  const camPlatforms = (c && Object.keys(c.platforms).length
     ? Object.keys(c.platforms)
     : persona.platforms) as PlatformId[];
 
-  const [hook, setHook] = useState<HookId>(c.topHook ?? "h2");
-  const [plat, setPlat] = useState<PlatformId>(camPlatforms[0]);
+  const [hook, setHook] = useState<HookId>("h2");
+  const [plat, setPlat] = useState<PlatformId | null>(null);
   const [schedOpen, setSchedOpen] = useState(false);
 
-  const platMeta = BR_PLATFORMS[plat];
-  const hk = BR_HOOKS[hook];
+  useEffect(() => {
+    if (!c) return;
+    setHook(c.topHook ?? "h2");
+    setPlat((camPlatforms[0] as PlatformId) ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c?.id]);
 
-  // Fase 3: hook AI nyata bila kampanye ini baru saja dibuat via backend.
-  const pending = id === "__new" ? getPendingCampaign() : null;
-  const aiResult: GenerateResult | null = pending?.result ?? null;
+  // Hook AI nyata: dari hasil generate baru saja (kampanye "__new") atau dari
+  // hooks tersimpan di backend (kampanye yang sudah ada).
+  const aiResult: GenerateResult | null = isNew ? (pending?.result ?? null) : fetched?.ai ?? null;
   const hasAI = !!aiResult;
   const aiHook = aiResult?.hooks[hook];
-  const backendId = pending?.backendId && pending.backendId !== "pending" ? pending.backendId : null;
+  const backendId = isNew
+    ? (pending?.backendId && pending.backendId !== "pending" ? pending.backendId : null)
+    : id ?? null;
 
-  const fallbackCap = useMemo(() => brBuildCaption(c, hook, plat, lang), [c, hook, plat, lang]);
+  // NB: hook harus dipanggil tanpa syarat (Rules of Hooks) — c/plat bisa
+  // null sebentar saat masih memuat, jadi cabang di dalam body-nya, bukan
+  // dengan return awal sebelum hook ini.
+  const fallbackCap = useMemo(
+    () => (c && plat ? brBuildCaption(c, hook, plat, lang) : { text: "", len: 0, max: 1 }),
+    [c, hook, plat, lang]
+  );
   const [capCache, setCapCache] = useState<Record<string, { text: string; len: number; max: number }>>({});
   const cacheKey = `${hook}-${plat}`;
   const cachedCap = capCache[cacheKey];
@@ -70,15 +96,35 @@ export default function DetailScreen() {
   const cap = cachedCap ?? fallbackCap;
 
   useEffect(() => {
-    if (!hasAI || !backendId || !aiHook || capCache[cacheKey]) return;
+    if (!plat || !hasAI || !backendId || !aiHook || capCache[cacheKey]) return;
     let alive = true;
     apiPost(`/campaigns/${backendId}/adapt-caption`, { hookId: aiHook.id, platform: plat, lang })
       .then((res) => { if (alive) setCapCache((m) => ({ ...m, [cacheKey]: res })); })
       .catch(() => { if (alive) setCapCache((m) => ({ ...m, [cacheKey]: fallbackCap })); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, hasAI, backendId]);
+  }, [cacheKey, hasAI, backendId, plat]);
 
+  if (!c || !plat) {
+    return (
+      <BrAppShell theme={theme} density="soft">
+        <View style={{ height: insets.top }} />
+        <BrAppHeader title={lang === "en" ? "Loading…" : "Memuat…"} subtitle="" onBack={() => router.back()} />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          {loadError ? (
+            <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink2, textAlign: "center" }}>
+              {lang === "en" ? "Couldn't load this campaign." : "Kampanye ini gagal dimuat."}
+            </Text>
+          ) : (
+            <ActivityIndicator color={theme.brand} />
+          )}
+        </View>
+      </BrAppShell>
+    );
+  }
+
+  const platMeta = BR_PLATFORMS[plat];
+  const hk = BR_HOOKS[hook];
   const preflight = brPreflight(c, lang);
   const allClear = preflight.every((r) => r.ok);
   const sm = brStatusMeta(c.status, theme, t);
@@ -280,6 +326,8 @@ export default function DetailScreen() {
         campaign={c}
         platforms={camPlatforms}
         hook={hook}
+        backendId={backendId}
+        hookRowId={aiHook?.id ?? null}
         onScheduled={() => { setSchedOpen(false); router.push("/schedule"); }}
       />
     </BrAppShell>

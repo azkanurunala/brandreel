@@ -1,12 +1,16 @@
 // src/routes/insights.ts — statistik gabungan (Bab 06)
 import { Router } from "express";
 import { prisma } from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const insightsRouter = Router();
+// NB: requireAuth per rute — lihat catatan di campaigns.ts soal kenapa
+// insightsRouter.use(requireAuth) tidak aman (semua router di-mount di root).
 
-// GET /insights — agregasi snapshot terbaru: total, per platform, per hook, top performer
-insightsRouter.get("/insights", async (_req, res) => {
+// GET /insights — agregasi snapshot terbaru MILIK akun yang login: total, per platform, per hook, top performer
+insightsRouter.get("/insights", requireAuth, async (req, res) => {
   const snapshots = await prisma.insightSnapshot.findMany({
+    where: { post: { campaign: { accountId: req.accountId } } },
     orderBy: { capturedAt: "desc" },
     include: {
       post: {

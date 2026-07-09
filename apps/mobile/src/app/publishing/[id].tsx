@@ -4,35 +4,20 @@
 // kalau tidak (kampanye demo bawaan tanpa baris DB), pakai simulasi timer.
 
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "@/context/BrContext";
 import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
-import { BR_CAMPAIGNS, type Campaign, type PlatformPost } from "@/data/campaigns";
+import { type PlatformPost } from "@/data/campaigns";
 import { getPendingCampaign } from "@/data/pendingCampaign";
 import { apiGet } from "@/lib/api";
+import { toViewCampaign, type ApiCampaign } from "@/lib/campaignView";
 import { BrAppShell, BrAppHeader, GhostButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
-
-function resolveCampaign(id: string | undefined): Campaign {
-  if (id === "__new") {
-    const p = getPendingCampaign();
-    if (p) return p.campaign;
-  }
-  return BR_CAMPAIGNS.find((c) => c.id === id) ?? BR_CAMPAIGNS[0];
-}
-
-function resolveBackendId(id: string | undefined): string | null {
-  if (id === "__new") {
-    const p = getPendingCampaign();
-    return p?.backendId && p.backendId !== "pending" ? p.backendId : null;
-  }
-  return null; // kampanye demo bawaan tak punya baris DB
-}
 
 export default function PublishingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,28 +25,34 @@ export default function PublishingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const c = resolveCampaign(id);
-  const backendId = resolveBackendId(id);
-  const initial: Record<string, PlatformPost> = Object.keys(c.platforms).length
+  const isNew = id === "__new";
+  const pending = isNew ? getPendingCampaign() : null;
+  // "__new" barusan dibuat: pakai backendId yang sudah diketahui dari
+  // create.tsx. Kampanye lain: id di URL ADALAH id backend asli sekarang
+  // (BR_CAMPAIGNS dummy sudah tak dipakai lagi di routing manapun).
+  const backendId = isNew
+    ? (pending?.backendId && pending.backendId !== "pending" ? pending.backendId : null)
+    : id ?? null;
+
+  const [fetchedCampaign, setFetchedCampaign] = useState(isNew ? pending?.campaign ?? null : null);
+  useEffect(() => {
+    if (!backendId) return;
+    let alive = true;
+    apiGet(`/campaigns/${backendId}`)
+      .then((api: ApiCampaign) => { if (alive) setFetchedCampaign(toViewCampaign(api)); })
+      .catch((e) => console.warn("gagal ambil campaign:", e));
+    return () => { alive = false; };
+  }, [backendId]);
+
+  const c = fetchedCampaign;
+  const initial: Record<string, PlatformPost> = c && Object.keys(c.platforms).length
     ? Object.fromEntries(Object.entries(c.platforms).map(([k, v]) => [k, { ...(v as PlatformPost) }]))
     : Object.fromEntries(BR_PLATFORM_ORDER.map((p) => [p, { state: "queued" as const }]));
 
   const [states, setStates] = useState(initial);
+  useEffect(() => { setStates(initial); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [c?.id]);
 
-  // Kampanye demo tanpa baris DB: simulasi "live" antre → terkirim bertahap.
-  useEffect(() => {
-    if (backendId) return;
-    const order = Object.keys(states).filter((k) => states[k].state === "queued");
-    const timers = order.map((k, i) =>
-      setTimeout(() => {
-        setStates((s) => ({ ...s, [k]: { ...s[k], state: "posted", views: ["240", "1.1K", "86", "12", "57"][i % 5] } }));
-      }, 1200 + i * 1100)
-    );
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendId]);
-
-  // Kampanye nyata: poll status asli dari backend (hasil worker.ts).
+  // Poll status asli dari backend (hasil worker.ts).
   useEffect(() => {
     if (!backendId) return;
     let alive = true;
@@ -94,7 +85,18 @@ export default function PublishingScreen() {
   };
   const postedCount = Object.values(states).filter((s) => s.state === "posted").length;
   const total = Object.keys(states).length;
-  const hasIssue = Object.values(states).some((s) => s.state === "failed" || s.state === "retry");
+
+  if (!c) {
+    return (
+      <BrAppShell theme={theme} density="soft">
+        <View style={{ height: insets.top }} />
+        <BrAppHeader title={t.pub.title} subtitle="" onBack={() => router.back()} />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <ActivityIndicator color={theme.brand} />
+        </View>
+      </BrAppShell>
+    );
+  }
 
   return (
     <BrAppShell theme={theme} density="soft">
@@ -151,27 +153,6 @@ export default function PublishingScreen() {
             );
           })}
         </View>
-
-        {/* Log error bila ada (contoh statis — kampanye demo saja; kampanye
-            nyata tampilkan Post.lastError asli lewat status di atas) */}
-        {hasIssue && !backendId && (
-          <>
-            <View style={{ paddingTop: 18, paddingHorizontal: 4, paddingBottom: 8 }}>
-              <Text style={{ fontFamily: FONT.mono, fontSize: 10, letterSpacing: 2.2, textTransform: "uppercase", color: theme.ink3 }}>
-                {lang === "en" ? "ERROR LOG" : "LOG ERROR"}
-              </Text>
-            </View>
-            <GlassPanel theme={theme} padding={13} style={{ borderColor: theme.neg + "40" }}>
-              <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.neg, letterSpacing: 0.4, lineHeight: 17 }}>
-                [IG] reject · aspect 9:16 expected, got 9:15{"\n"}
-                <Text style={{ color: theme.ink3 }}>
-                  ↳ {lang === "en" ? "auto-fix: smart-crop to 9:16 · re-queued" : "auto-fix: smart-crop ke 9:16 · diantrekan ulang"}{"\n"}
-                </Text>
-                [X] 429 rate-limited · {lang === "en" ? "retry in 60s (backoff)" : "ulang 60d (backoff)"}
-              </Text>
-            </GlassPanel>
-          </>
-        )}
 
         <View style={{ marginTop: 18 }}>
           <GhostButton theme={theme} onPress={() => router.push("/insights")}>

@@ -14,7 +14,7 @@ import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { setPendingCampaign, setPendingBackend, type GenerateResult } from "@/data/pendingCampaign";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 
 function Label({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -61,9 +61,7 @@ export default function CreateScreen() {
     let createdId = "pending";
     async function runGenerate(): Promise<GenerateResult | null> {
       try {
-        const account = await apiGet("/accounts/demo");
         const campaign = await apiPost("/campaigns", {
-          accountId: account.id,
           product: productName,
           description: desc.trim() || undefined,
           platforms: plats,

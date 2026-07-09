@@ -1,26 +1,29 @@
 // Sheet Jadwalkan — porting BrScheduleSheet dari prototype br-screens-schedule.jsx.
 // Pilih hari + jam sebelum mengantre kampanye; jeda otomatis antar platform.
 
-import React, { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "../../context/BrContext";
 import { BR_PLATFORMS, type HookId, type PlatformId } from "../../theme/tokens";
-import { BR_DOW, BR_MON, BR_PEAK_HOURS, brAddScheduled, brSlotDate, type UserSlot } from "../../data/schedule";
+import { BR_DOW, BR_MON, BR_PEAK_HOURS, brSlotDate } from "../../data/schedule";
 import type { Campaign } from "../../data/campaigns";
+import { apiPost } from "../../lib/api";
 import { PlatformBadge } from "./BrandGlyph";
 import { FONT } from "./fonts";
 
 const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 06:00 → 22:00
 
 export function ScheduleSheet({
-  visible, onClose, campaign, platforms, hook, onScheduled,
+  visible, onClose, campaign, platforms, hook, backendId, hookRowId, onScheduled,
 }: {
   visible: boolean;
   onClose: () => void;
   campaign: Campaign;
   platforms: PlatformId[];
   hook: HookId;
+  backendId: string | null;
+  hookRowId: string | null;
   onScheduled: () => void;
 }) {
   const { theme, lang } = useBr();
@@ -35,6 +38,7 @@ export function ScheduleSheet({
   const [hour, setHour] = useState(defaultPeak ?? 9);
   const [min, setMin] = useState(0);
   const [stagger, setStagger] = useState(multi);
+  const [busy, setBusy] = useState(false);
 
   const slotDate = brSlotDate(now, day, hour, min);
   const selectedPast = slotDate.getTime() <= now.getTime();
@@ -42,16 +46,24 @@ export function ScheduleSheet({
   const fmt2 = (n: number) => String(n).padStart(2, "0");
   const timeLabel = `${fmt2(hour)}:${fmt2(min)}`;
 
-  function confirm() {
-    if (selectedPast) return;
-    const base = hour * 60 + min;
-    const entries: UserSlot[] = platforms.map((pid, i) => {
-      const total = base + (stagger ? i * 30 : 0);
-      const tt = total % 1440;
-      return { off: day + Math.floor(total / 1440), h: Math.floor(tt / 60), m: tt % 60, cid: campaign.id, pid, hk: hook };
-    });
-    brAddScheduled(entries);
-    onScheduled();
+  async function confirm() {
+    if (selectedPast || busy) return;
+    if (!backendId) {
+      Alert.alert(en ? "Not ready yet" : "Belum siap", en ? "This campaign isn't saved on the server yet." : "Kampanye ini belum tersimpan di server.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiPost(`/campaigns/${backendId}/publish`, {
+        hookId: hookRowId ?? undefined,
+        scheduledAt: slotDate.toISOString(),
+      });
+      onScheduled();
+    } catch (e: any) {
+      Alert.alert(en ? "Scheduling failed" : "Gagal menjadwalkan", e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -230,12 +242,16 @@ export function ScheduleSheet({
             }}>
               <Text style={{ fontFamily: FONT.sansSemi, fontSize: 14, color: theme.ink2 }}>{en ? "Cancel" : "Batal"}</Text>
             </Pressable>
-            <Pressable onPress={confirm} disabled={selectedPast} style={{ flex: 1, opacity: selectedPast ? 0.5 : 1 }}>
+            <Pressable onPress={confirm} disabled={selectedPast || busy} style={{ flex: 1, opacity: selectedPast ? 0.5 : 1 }}>
               <LinearGradient colors={[theme.brand, theme.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.5 }}
                 style={{ borderRadius: 14, paddingVertical: 13, alignItems: "center" }}>
-                <Text style={{ fontFamily: FONT.sansBold, fontSize: 15, color: "#fff" }}>
-                  {en ? `Schedule ${platforms.length} post${platforms.length > 1 ? "s" : ""}` : `Jadwalkan ${platforms.length} post`} →
-                </Text>
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ fontFamily: FONT.sansBold, fontSize: 15, color: "#fff" }}>
+                    {en ? `Schedule ${platforms.length} post${platforms.length > 1 ? "s" : ""}` : `Jadwalkan ${platforms.length} post`} →
+                  </Text>
+                )}
               </LinearGradient>
             </Pressable>
           </View>

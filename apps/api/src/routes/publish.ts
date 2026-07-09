@@ -5,12 +5,15 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { publishQueue } from "../queue.js";
 import { getAdapter, PLATFORM_SPEC, type PlatformId } from "../lib/adapters/index.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const publishRouter = Router();
+// NB: requireAuth per rute — lihat catatan di campaigns.ts soal kenapa
+// publishRouter.use(requireAuth) tidak aman (semua router di-mount di root).
 
-const publishSchema = z.object({ hookId: z.string().optional() });
+const publishSchema = z.object({ hookId: z.string().optional(), scheduledAt: z.string().datetime().optional() });
 
-publishRouter.post("/campaigns/:id/publish", async (req, res) => {
+publishRouter.post("/campaigns/:id/publish", requireAuth, async (req, res) => {
   const parsed = publishSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -18,7 +21,7 @@ publishRouter.post("/campaigns/:id/publish", async (req, res) => {
     where: { id: req.params.id },
     include: { renders: true, hooks: true },
   });
-  if (!campaign) return res.status(404).json({ error: "Campaign tidak ditemukan" });
+  if (!campaign || campaign.accountId !== req.accountId) return res.status(404).json({ error: "Campaign tidak ditemukan" });
 
   const hookId = parsed.data.hookId ?? campaign.hooks.find((h) => h.label === campaign.topHook)?.id;
   const hook = hookId ? campaign.hooks.find((h) => h.id === hookId) : campaign.hooks[0];
@@ -61,8 +64,9 @@ publishRouter.post("/campaigns/:id/publish", async (req, res) => {
     });
     if (dupe) { results.push({ platform, ok: false, reason: "sudah pernah diposting" }); continue; }
 
-    // Stagger: TikTok dijeda dari post TikTok terakhir yang antre/tayang
-    let scheduledAt = new Date();
+    // Jadwal: waktu pilihan pengguna (Bab-Jadwal) atau sekarang; TikTok
+    // tetap dijeda dari post TikTok terakhir yang antre/tayang di bawah.
+    let scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : new Date();
     if (spec.staggerMinutes) {
       const last = await prisma.post.findFirst({
         where: { platform, state: { in: ["queued", "posted"] } },
