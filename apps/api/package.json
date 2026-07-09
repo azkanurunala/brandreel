@@ -15,6 +15,8 @@
     "//start": "Jalankan server hasil build (produksi)",
     "start": "node dist/index.js",
     "start:worker": "node dist/worker.js",
+    "//start-all": "API + worker satu proses (slot Render terbatas — Bab 15)",
+    "start:all": "node dist/start-all.js",
     "//job-insights": "Dijalankan oleh Cron Render (Bab 06)",
     "job:insights": "node dist/jobs/insights.js",
     "//prisma": "Perintah database (Bab 16)",
