@@ -15,6 +15,7 @@ import { publishRouter } from "./routes/publish.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { brandKitRouter } from "./routes/brandkit.js";
 import { uploadsRouter } from "./routes/uploads.js";
+import { setupRouter } from "./routes/setup.js";
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use(publishRouter);
 app.use(webhooksRouter);
 app.use(brandKitRouter);
 app.use(uploadsRouter);
+app.use(setupRouter);
 
 // --- 404 & error handler sederhana ---
 app.use((req, res) => res.status(404).json({ error: "Tidak ditemukan", path: req.path }));

@@ -5,7 +5,7 @@
 // terpisah begitu worker/render selesai (lihat apps/api/src/worker.ts).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,6 +16,7 @@ import { BR_HOOKS, BR_HOOK_ORDER, BR_PLATFORMS, type HookId, type PlatformId } f
 import { brBuildCaption, type Campaign, type PreflightRow } from "@/data/campaigns";
 import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
 import { apiGet, apiPost } from "@/lib/api";
+import { Alert } from "@/lib/alert";
 import { toViewCampaign, hooksToGenerateResult, type ApiCampaign } from "@/lib/campaignView";
 import { BrAppShell, BrAppHeader, FloatingActionBar, GhostButton, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";

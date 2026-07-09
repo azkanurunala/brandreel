@@ -4,7 +4,7 @@
 // persona demo/switcher RBAC palsu.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +18,7 @@ import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { apiGet, apiPost } from "@/lib/api";
 import { clearToken } from "@/lib/session";
+import { Alert } from "@/lib/alert";
 
 const OAUTH_IMPLEMENTED: PlatformId[] = ["tiktok", "instagram", "youtube", "linkedin", "twitter", "facebook"];
 
@@ -143,11 +144,16 @@ export default function ProfileScreen() {
             <Text style={{ fontFamily: FONT.display, fontSize: 18, color: theme.ink, letterSpacing: -0.3 }}>
               {account ? account.plan.toUpperCase() : "···"}
             </Text>
-            <Pressable style={({ pressed }) => ({
-              borderWidth: 1, borderColor: theme.brand, backgroundColor: theme.brand + "12",
-              borderRadius: 999, paddingVertical: 7, paddingHorizontal: 14,
-              transform: [{ scale: pressed ? 0.95 : 1 }],
-            })}>
+            <Pressable
+              onPress={() => Alert.alert(
+                lang === "en" ? "Not available yet" : "Belum tersedia",
+                lang === "en" ? "Billing isn't wired up on the server yet." : "Billing belum disambungkan di server."
+              )}
+              style={({ pressed }) => ({
+                borderWidth: 1, borderColor: theme.brand, backgroundColor: theme.brand + "12",
+                borderRadius: 999, paddingVertical: 7, paddingHorizontal: 14,
+                transform: [{ scale: pressed ? 0.95 : 1 }],
+              })}>
               <Text style={{ fontFamily: FONT.sansBold, fontSize: 12, color: theme.brand }}>{t.profile.upgrade}</Text>
             </Pressable>
           </View>
@@ -342,6 +348,8 @@ function SettingRow({ icon, label, value, locked, lockLabel }: {
   lockLabel?: string;
 }) {
   const { theme } = useBr();
+  // Belum ada layar tujuan (mis. manajemen brand kit) — jangan tampilkan
+  // chevron "›" yang nyiratin bisa diketuk padahal enggak ke mana-mana.
   return (
     <View style={{
       backgroundColor: theme.glassHi, borderWidth: 1, borderColor: theme.hair,
@@ -364,11 +372,7 @@ function SettingRow({ icon, label, value, locked, lockLabel }: {
         <Text style={{ fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink }}>{label}</Text>
         <Text numberOfLines={1} style={{ fontFamily: FONT.sans, fontSize: 11, color: theme.ink3, marginTop: 1 }}>{value}</Text>
       </View>
-      {locked ? (
-        <GlassChip theme={theme} color={theme.ink3}>🔒 {lockLabel}</GlassChip>
-      ) : (
-        <Text style={{ color: theme.ink3, fontSize: 18 }}>›</Text>
-      )}
+      {locked && <GlassChip theme={theme} color={theme.ink3}>🔒 {lockLabel}</GlassChip>}
     </View>
   );
 }

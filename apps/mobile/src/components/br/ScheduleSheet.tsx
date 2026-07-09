@@ -2,9 +2,10 @@
 // Pilih hari + jam sebelum mengantre kampanye; jeda otomatis antar platform.
 
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBr } from "../../context/BrContext";
+import { Alert } from "../../lib/alert";
 import { BR_PLATFORMS, type HookId, type PlatformId } from "../../theme/tokens";
 import { BR_DOW, BR_MON, BR_PEAK_HOURS, brSlotDate } from "../../data/schedule";
 import type { Campaign } from "../../data/campaigns";
@@ -54,10 +55,22 @@ export function ScheduleSheet({
     }
     setBusy(true);
     try {
-      await apiPost(`/campaigns/${backendId}/publish`, {
+      const res = await apiPost(`/campaigns/${backendId}/publish`, {
         hookId: hookRowId ?? undefined,
         scheduledAt: slotDate.toISOString(),
       });
+      const results = (res?.results ?? []) as { platform: string; ok: boolean; reason?: string }[];
+      if (results.length && !results.some((r) => r.ok)) {
+        // Sama kayak tombol "Posting sekarang" di detail/[id].tsx — backend
+        // balikin 202 walau SEMUA platform ditolak pre-flight (belum
+        // connect dsb), jadi jangan anggap sukses cuma dari status HTTP.
+        const lines = results.map((r) => `${r.platform}: ${r.reason ?? "gagal"}`).join("\n");
+        Alert.alert(
+          en ? "Nothing was scheduled" : "Tidak ada yang terjadwal",
+          en ? `All platforms rejected:\n${lines}` : `Semua platform ditolak:\n${lines}`
+        );
+        return;
+      }
       onScheduled();
     } catch (e: any) {
       Alert.alert(en ? "Scheduling failed" : "Gagal menjadwalkan", e.message ?? String(e));

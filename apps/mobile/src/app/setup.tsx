@@ -1,8 +1,11 @@
 // Setup API (developer) — porting BrSetup dari prototype br-screens-setup.jsx.
 // Panduan berjenjang untuk mengisi kunci integrasi di .env backend.
-// Field di layar ini TIDAK dikirim ke jaringan — hanya state lokal (UI-only demo).
+// Status "Terhubung/Atur" ditarik NYATA dari GET /setup/status (server cek
+// env var ada/tidak — nilai asli tidak pernah dikirim balik). Field teks di
+// bawah tiap kartu murni catatan pribadi kamu — TIDAK dikirim ke server,
+// nilai sebenarnya harus diisi langsung di .env server lalu restart worker.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
@@ -15,6 +18,7 @@ import { BrAppHeader } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
+import { apiGet } from "@/lib/api";
 
 export default function SetupScreen() {
   const { theme, lang } = useBr();
@@ -23,33 +27,22 @@ export default function SetupScreen() {
   const en = lang === "en";
 
   const items = brAllApiItems();
-  const [vals, setVals] = useState<Record<string, string>>(() => {
-    const v: Record<string, string> = {};
-    items.forEach((it) => { if (it.seed) it.fields.forEach((f) => { v[f.env] = "••••••••••••••••"; }); });
-    return v;
-  });
+  const [vals, setVals] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState<string | null>(null);
 
-  const isConnected = (it: ApiItem) => it.fields.every((f) => (vals[f.env] ?? "").trim().length > 0);
-  const connectedCount = items.filter(isConnected).length;
+  // Status nyata dari server — null = belum dimuat, jangan tebak apa pun.
+  const [status, setStatus] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    apiGet("/setup/status").then(setStatus).catch(() => setStatus({}));
+  }, []);
+
+  const isConnected = (it: ApiItem) => !!status && it.fields.every((f) => status[f.env]);
+  const connectedCount = status ? items.filter(isConnected).length : 0;
   const total = items.length;
-  const pct = Math.round((connectedCount / total) * 100);
+  const pct = status ? Math.round((connectedCount / total) * 100) : 0;
 
   function setVal(env: string, v: string) {
     setVals((s) => ({ ...s, [env]: v }));
-  }
-  function verify(it: ApiItem) {
-    setVerifying(it.id);
-    setTimeout(() => {
-      setVals((s) => {
-        const n = { ...s };
-        it.fields.forEach((f) => { if (!(n[f.env] ?? "").trim()) n[f.env] = "••••••••••••••••"; });
-        return n;
-      });
-      setVerifying(null);
-      setOpen(null);
-    }, 950);
   }
 
   return (
@@ -63,7 +56,7 @@ export default function SetupScreen() {
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
             <View>
               <Text style={{ fontFamily: FONT.display, fontSize: 32, color: theme.ink, letterSpacing: -1 }}>
-                {connectedCount}<Text style={{ fontSize: 16, color: theme.ink3 }}>/{total}</Text>
+                {status === null ? "···" : connectedCount}<Text style={{ fontSize: 16, color: theme.ink3 }}>/{total}</Text>
               </Text>
               <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 1, marginTop: 5, textTransform: "uppercase" }}>
                 {en ? "services connected" : "layanan terhubung"}
@@ -97,7 +90,6 @@ export default function SetupScreen() {
               {g.items.map((it) => {
                 const conn = isConnected(it);
                 const isOpen = open === it.id;
-                const busy = verifying === it.id;
                 return (
                   <View key={it.id} style={{
                     backgroundColor: theme.glassHi, borderWidth: 1,
@@ -160,7 +152,9 @@ export default function SetupScreen() {
                         <View style={{ gap: 9, marginTop: 14 }}>
                           {it.fields.map((f) => (
                             <View key={f.env} style={{ gap: 4 }}>
-                              <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.6 }}>{f.env}</Text>
+                              <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.6 }}>
+                                {f.env}{status && status[f.env] ? ` · ${en ? "set on server" : "sudah diisi di server"}` : ""}
+                              </Text>
                               <TextInput
                                 value={vals[f.env] ?? ""}
                                 onChangeText={(v) => setVal(f.env, v)}
@@ -175,12 +169,18 @@ export default function SetupScreen() {
                             </View>
                           ))}
                         </View>
+                        <Text style={{ fontFamily: FONT.sans, fontSize: 10.5, color: theme.ink3, marginTop: 8, lineHeight: 15 }}>
+                          {en
+                            ? "This form doesn't save to the server — it's scratch space. Set the real value in the server's .env, then refresh status below."
+                            : "Form ini tidak tersimpan ke server — cuma catatan sementara. Isi nilai aslinya di .env server, lalu segarkan status di bawah."}
+                        </Text>
 
-                        <Pressable onPress={() => verify(it)} style={({ pressed }) => ({ marginTop: 13, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+                        <Pressable onPress={() => apiGet("/setup/status").then(setStatus).catch(() => {})}
+                          style={({ pressed }) => ({ marginTop: 13, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
                           <LinearGradient colors={[theme.brand, theme.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.5 }}
                             style={{ borderRadius: 12, paddingVertical: 11, alignItems: "center" }}>
                             <Text style={{ fontFamily: FONT.sansBold, fontSize: 14, color: "#fff" }}>
-                              {busy ? (en ? "Verifying…" : "Memverifikasi…") : conn ? (en ? "Re-verify connection" : "Verifikasi ulang") : en ? "Save & verify" : "Simpan & verifikasi"}
+                              {conn ? (en ? "Refresh status" : "Segarkan status") : en ? "Check status" : "Cek status"}
                             </Text>
                           </LinearGradient>
                         </Pressable>

@@ -43,9 +43,12 @@ oauthRouter.post("/auth/:platform/start", requireAuth, (req, res) => {
   try {
     let consentUrl: string;
     switch (platform) {
-      case "tiktok":
-        consentUrl = buildTikTokAuthorizeUrl(state);
+      case "tiktok": {
+        const pkce = generatePkce();
+        entry.pkceVerifier = pkce.verifier;
+        consentUrl = buildTikTokAuthorizeUrl(state, pkce.challenge);
         break;
+      }
       case "instagram":
       case "facebook":
         consentUrl = buildMetaAuthorizeUrl(platform, state);
@@ -110,7 +113,8 @@ oauthRouter.get("/auth/:platform/callback", async (req, res) => {
 
     switch (platform) {
       case "tiktok": {
-        const tokens = await exchangeTikTokCode(code);
+        if (!pending.pkceVerifier) throw new Error("PKCE verifier hilang — mulai ulang dari /auth/tiktok/start");
+        const tokens = await exchangeTikTokCode(code, pending.pkceVerifier);
         remoteUserId = tokens.open_id;
         tokenRefPayload = { access_token: tokens.access_token, refresh_token: tokens.refresh_token };
         scopes = tokens.scope.split(",");

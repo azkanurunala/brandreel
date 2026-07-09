@@ -5,7 +5,7 @@
 // daripada pura-pura berhasil.
 
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr } from "@/context/BrContext";
@@ -15,6 +15,7 @@ import { BrandMark } from "@/components/br/Glass";
 import { BrandGlyph } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { loginWithGoogle } from "@/lib/googleAuth";
+import { Alert } from "@/lib/alert";
 
 export default function LoginScreen() {
   const { theme, lang, t, reloadAccount } = useBr();

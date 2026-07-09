@@ -3,7 +3,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,6 +16,7 @@ import { BrandGlyph, PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
 import { loginWithGoogle } from "@/lib/googleAuth";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { Alert } from "@/lib/alert";
 import { pickAndUploadImage } from "@/lib/imageUpload";
 import { toFrontendPlatform } from "@/lib/campaignView";
 

@@ -59,7 +59,7 @@ export const BR_API_GROUPS: ApiGroup[] = [
           en: ["Create a Business-type app at Meta for Developers", "Add the Instagram Graph API product", "Connect a Professional/Business IG account", "Generate a long-lived access token"],
           id: ["Buat app tipe Business di Meta for Developers", "Tambahkan produk Instagram Graph API", "Hubungkan akun IG Professional/Business", "Buat long-lived access token"],
         },
-        fields: [{ env: "META_APP_ID", label_en: "App ID", label_id: "App ID" }, { env: "META_APP_SECRET", label_en: "App secret", label_id: "App secret" }, { env: "IG_LONG_LIVED_TOKEN", label_en: "Access token", label_id: "Access token" }],
+        fields: [{ env: "META_APP_ID", label_en: "App ID", label_id: "App ID" }, { env: "META_APP_SECRET", label_en: "App secret", label_id: "App secret" }],
         seed: true,
       },
       {
@@ -92,7 +92,7 @@ export const BR_API_GROUPS: ApiGroup[] = [
           en: ["Create a Project + App in the X Developer Portal", "Enable OAuth 2.0 and set the callback URL", "Generate API Key/Secret and a Bearer Token"],
           id: ["Buat Project + App di X Developer Portal", "Aktifkan OAuth 2.0 & atur callback URL", "Buat API Key/Secret dan Bearer Token"],
         },
-        fields: [{ env: "X_API_KEY", label_en: "API key", label_id: "API key" }, { env: "X_API_SECRET", label_en: "API secret", label_id: "API secret" }, { env: "X_BEARER_TOKEN", label_en: "Bearer token", label_id: "Bearer token" }],
+        fields: [{ env: "X_CLIENT_ID", label_en: "Client ID", label_id: "Client ID" }, { env: "X_CLIENT_SECRET", label_en: "Client secret", label_id: "Client secret" }],
         seed: false,
       },
     ],
