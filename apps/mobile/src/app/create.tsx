@@ -25,6 +25,14 @@ function Label({ children, color }: { children: React.ReactNode; color: string }
   );
 }
 
+interface BrandKit {
+  id: string;
+  name: string;
+  voice: string | null;
+  logoUrl: string | null;
+  colors: string[];
+}
+
 export default function CreateScreen() {
   const { theme, lang, t, persona } = useBr();
   const router = useRouter();
@@ -36,16 +44,31 @@ export default function CreateScreen() {
   const [plats, setPlats] = useState<PlatformId[]>(persona.platforms as PlatformId[]);
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
-  const [brandVoice, setBrandVoice] = useState<string | null>(null);
+  const [voice, setVoice] = useState("");
+
+  // Akun boleh punya banyak brand kit (mis. agensi kelola beberapa klien) —
+  // pilih salah satu buat campaign ini; voice & warna tetap bisa ditimpa
+  // manual di bawah tanpa mengubah brand kit yang tersimpan.
+  const [kits, setKits] = useState<BrandKit[] | null>(null);
+  const [selectedKitId, setSelectedKitId] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet("/brand-kit").then((kit) => {
-      if (kit?.colors?.[0]) setLogoColor(kit.colors[0]);
-      if (kit?.voice) setBrandVoice(kit.voice);
-    }).catch(() => {});
+    apiGet("/brand-kits").then((list: BrandKit[]) => {
+      setKits(list);
+      const first = list[0];
+      if (first) {
+        setSelectedKitId(first.id);
+        if (first.colors?.[0]) setLogoColor(first.colors[0]);
+        if (first.voice) setVoice(first.voice);
+      }
+    }).catch(() => setKits([]));
   }, []);
 
-  const voice = brandVoice ?? (lang === "en" ? "Not set yet" : "Belum diatur");
+  function selectKit(kit: BrandKit) {
+    setSelectedKitId(kit.id);
+    if (kit.colors?.[0]) setLogoColor(kit.colors[0]);
+    setVoice(kit.voice ?? "");
+  }
 
   async function handlePickProductImage() {
     setImageUploading(true);
@@ -54,6 +77,26 @@ export default function CreateScreen() {
       if (url) setProductImageUrl(url);
     } finally {
       setImageUploading(false);
+    }
+  }
+
+  const [newKitOpen, setNewKitOpen] = useState(false);
+  const [newKitName, setNewKitName] = useState("");
+  const [savingKit, setSavingKit] = useState(false);
+
+  async function saveNewKit() {
+    if (!newKitName.trim()) return;
+    setSavingKit(true);
+    try {
+      const kit: BrandKit = await apiPost("/brand-kits", { name: newKitName.trim(), colors: [theme.brand] });
+      setKits((prev) => [...(prev ?? []), kit]);
+      selectKit(kit);
+      setNewKitName("");
+      setNewKitOpen(false);
+    } catch (e: any) {
+      console.warn("gagal bikin brand kit:", e);
+    } finally {
+      setSavingKit(false);
     }
   }
 
@@ -87,10 +130,11 @@ export default function CreateScreen() {
           product: productName,
           description: desc.trim() || undefined,
           productImageUrl: productImageUrl ?? undefined,
+          brandKitId: selectedKitId ?? undefined,
           platforms: plats,
         });
         createdId = campaign.id;
-        const gen = await apiPost(`/campaigns/${campaign.id}/generate`, { lang });
+        const gen = await apiPost(`/campaigns/${campaign.id}/generate`, { lang, voice: voice.trim() || undefined });
         const hooks = Object.fromEntries(
           (gen.hooks as { id: string; label: string; script: string; caption: string }[]).map((h) => [
             h.label,
@@ -171,25 +215,68 @@ export default function CreateScreen() {
           }}
         />
 
-        {/* Brand voice (dari brand kit) */}
+        {/* Brand kit — akun boleh punya banyak, pilih salah satu (opsional) */}
+        <Label color={theme.ink3}>{lang === "en" ? "Brand" : "Brand"}</Label>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+          {(kits ?? []).map((kit) => {
+            const on = kit.id === selectedKitId;
+            return (
+              <Pressable key={kit.id} onPress={() => selectKit(kit)}
+                style={({ pressed }) => ({
+                  flexDirection: "row", alignItems: "center", gap: 7,
+                  borderWidth: 1, borderColor: on ? theme.brand : theme.hair,
+                  backgroundColor: on ? theme.brand + "14" : theme.glassHi,
+                  borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12,
+                  transform: [{ scale: pressed ? 0.96 : 1 }],
+                })}>
+                <View style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: kit.colors?.[0] ?? theme.brand }} />
+                <Text style={{ fontFamily: FONT.sansSemi, fontSize: 12.5, color: on ? theme.brand : theme.ink2 }}>{kit.name}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={() => setNewKitOpen((v) => !v)}
+            style={({ pressed }) => ({
+              borderWidth: 1, borderColor: theme.hair, borderStyle: "dashed", backgroundColor: theme.glassHi,
+              borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
+            })}>
+            <Text style={{ fontFamily: FONT.sansSemi, fontSize: 12.5, color: theme.ink2 }}>
+              + {lang === "en" ? "New brand" : "Brand baru"}
+            </Text>
+          </Pressable>
+        </View>
+        {newKitOpen && (
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+            <TextInput value={newKitName} onChangeText={setNewKitName}
+              placeholder={lang === "en" ? "Brand name" : "Nama brand"}
+              placeholderTextColor={theme.ink3}
+              style={{
+                flex: 1, backgroundColor: theme.glassHi, borderWidth: 1, borderColor: theme.hair, borderRadius: 12,
+                paddingVertical: 10, paddingHorizontal: 13, fontFamily: FONT.sansSemi, fontSize: 13.5, color: theme.ink,
+              }} />
+            <Pressable onPress={saveNewKit} disabled={savingKit || !newKitName.trim()}
+              style={{ borderRadius: 12, backgroundColor: theme.brand, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", opacity: savingKit || !newKitName.trim() ? 0.6 : 1 }}>
+              {savingKit ? <ActivityIndicator color="#fff" /> : <Text style={{ fontFamily: FONT.sansBold, fontSize: 13, color: "#fff" }}>{lang === "en" ? "Save" : "Simpan"}</Text>}
+            </Pressable>
+          </View>
+        )}
+
+        {/* Brand voice — default dari brand kit terpilih, bisa ditimpa manual
+            buat campaign ini saja (gak mengubah brand kit tersimpan) */}
         <Label color={theme.ink3}>{t.create.voice}</Label>
         <GlassPanel theme={theme} padding={13} style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
           <View style={{
-            width: 30, height: 30, borderRadius: 9, backgroundColor: persona.color + "1C",
-            borderWidth: 1, borderColor: persona.color + "40", alignItems: "center", justifyContent: "center",
+            width: 30, height: 30, borderRadius: 9, backgroundColor: theme.brand + "1C",
+            borderWidth: 1, borderColor: theme.brand + "40", alignItems: "center", justifyContent: "center",
           }}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={persona.color} strokeWidth={1.8} strokeLinecap="round">
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={theme.brand} strokeWidth={1.8} strokeLinecap="round">
               <Path d="M3 10v4h4l5 5V5L7 10H3zM16 9a3 3 0 0 1 0 6" />
             </Svg>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink }}>{voice}</Text>
-            <Text style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 0.6, marginTop: 2, textTransform: "uppercase" }}>
-              {brandVoice
-                ? (lang === "en" ? "FROM BRAND KIT" : "DARI BRAND KIT")
-                : (lang === "en" ? "SET IT IN PROFILE → BRAND KIT" : "ATUR DI PROFIL → BRAND KIT")}
-            </Text>
-          </View>
+          <TextInput value={voice} onChangeText={setVoice}
+            placeholder={lang === "en" ? "e.g. casual, funny" : "mis. santai, lucu"}
+            placeholderTextColor={theme.ink3}
+            style={{ flex: 1, fontFamily: FONT.sansSemi, fontSize: 13, color: theme.ink, padding: 0 }} />
         </GlassPanel>
 
         {/* Foto produk (opsional) */}

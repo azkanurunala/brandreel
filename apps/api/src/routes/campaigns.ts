@@ -86,7 +86,10 @@ campaignsRouter.post("/campaigns/:id/generate", requireAuth, async (req, res) =>
   if (!campaign || campaign.accountId !== req.accountId) return res.status(404).json({ error: "Campaign tidak ditemukan" });
 
   const lang: "en" | "id" = req.body?.lang === "en" ? "en" : "id";
-  const voice = campaign.brandKit?.voice ?? "casual, friendly";
+  // Voice bisa ditimpa sekali pakai buat campaign ini saja (gak mengubah
+  // brand kit tersimpan) — brand kit tetap sumber default-nya.
+  const voiceOverride = typeof req.body?.voice === "string" ? req.body.voice.trim() : "";
+  const voice = voiceOverride || campaign.brandKit?.voice || "casual, friendly";
   const platforms = campaign.platforms.length ? campaign.platforms : ["tiktok", "instagram"];
   const language = lang === "en" ? "English" : "Bahasa Indonesia";
   const angles = HOOK_KEYS.map((k) => `${k}=${HOOK_BRIEF[k]}`).join("; ");

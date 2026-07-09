@@ -105,10 +105,15 @@ export default function OnboardScreen() {
   useEffect(() => { if (step === 2) loadConnections(); }, [step, loadConnections]);
 
   // Brand kit yang sudah ada (kalau pengguna pernah mengisinya) — jangan
-  // pura-pura kosong kalau sebenarnya sudah pernah disimpan.
+  // pura-pura kosong kalau sebenarnya sudah pernah disimpan. Onboarding
+  // cuma urus brand kit PERTAMA; bikin lebih dari satu dilakukan dari
+  // layar Buat Kampanye.
+  const [existingKitId, setExistingKitId] = useState<string | null>(null);
   useEffect(() => {
-    apiGet("/brand-kit").then((kit) => {
+    apiGet("/brand-kits").then((kits) => {
+      const kit = kits?.[0];
       if (!kit) return;
+      setExistingKitId(kit.id);
       setBrandName(kit.name ?? "");
       if (kit.logoUrl) setLogoUrl(kit.logoUrl);
       if (kit.colors?.[0]) setLogoColor(kit.colors[0]);
@@ -132,12 +137,14 @@ export default function OnboardScreen() {
   async function saveBrandKit() {
     setSavingKit(true);
     try {
-      await apiPut("/brand-kit", {
+      const body = {
         name: brandName.trim() || "My Brand",
         voice: voice.join(","),
         logoUrl: logoUrl ?? undefined,
         colors: [logoColor],
-      });
+      };
+      if (existingKitId) await apiPut(`/brand-kits/${existingKitId}`, body);
+      else await apiPost("/brand-kits", body);
     } catch (e: any) {
       console.warn("gagal simpan brand kit:", e);
     } finally {

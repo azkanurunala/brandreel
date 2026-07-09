@@ -21,6 +21,7 @@ import { GeistMono_400Regular, GeistMono_500Medium, GeistMono_600SemiBold } from
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BrProvider } from "@/context/BrContext";
 import { AdaptiveShell } from "@/components/br/AdaptiveShell";
+import { AuthGate } from "@/components/AuthGate";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -48,9 +49,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <BrProvider>
-        <AdaptiveShell>
-          <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }} />
-        </AdaptiveShell>
+        <AuthGate>
+          <AdaptiveShell>
+            <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }} />
+          </AdaptiveShell>
+        </AuthGate>
       </BrProvider>
     </SafeAreaProvider>
   );
