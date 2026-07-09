@@ -21,7 +21,7 @@ const STEPS = 5;
 // (lib/googleAuth.ts); Apple belum diimplementasi server-side, jadi jujur
 // bilang belum tersedia daripada pura-pura berhasil.
 function SSORow({ onSuccess }: { onSuccess: () => void }) {
-  const { theme, lang } = useBr();
+  const { theme, lang, reloadAccount } = useBr();
   const [busy, setBusy] = useState<"google" | null>(null);
 
   async function onPick(id: "google" | "apple") {
@@ -35,8 +35,12 @@ function SSORow({ onSuccess }: { onSuccess: () => void }) {
     setBusy("google");
     try {
       const ok = await loginWithGoogle();
-      if (ok) onSuccess();
-      else Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", lang === "en" ? "Try again." : "Coba lagi.");
+      if (ok) {
+        await reloadAccount();
+        onSuccess();
+      } else {
+        Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", lang === "en" ? "Try again." : "Coba lagi.");
+      }
     } catch (e: any) {
       Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", e.message ?? String(e));
     } finally {

@@ -1,11 +1,24 @@
 // Konteks global BrandReel: tema, bahasa, persona, skenario.
 // Padanan BrCtx di prototype (assets/br-shell.jsx + br-app.jsx).
 
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { buildTheme, type AccentKey, type Theme, type ThemeKey } from "../theme/tokens";
 import { BR_T, type Lang, type Strings } from "../i18n/strings";
 import { BR_PERSONAS, BR_SCENARIOS, type Persona, type PersonaId, type Scenario, type ScenarioId } from "../data/personas";
 import type { CampaignStatus } from "../data/campaigns";
+import { apiGet } from "../lib/api";
+import { getToken } from "../lib/session";
+
+// Akun BrandReel yang beneran login (Bab 04) — beda dari `persona` di bawah,
+// yang cuma switcher demo RBAC (belum terhubung ke sesi asli).
+export interface Account {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  plan: string;
+  postQuota: number;
+}
 
 export interface BrContextValue {
   theme: Theme;
@@ -16,6 +29,8 @@ export interface BrContextValue {
   persona: Persona;
   scenario: Scenario;
   autopost: boolean;
+  account: Account | null;
+  reloadAccount: () => Promise<void>;
   setThemeKey: (k: ThemeKey) => void;
   setAccentKey: (k: AccentKey) => void;
   setLang: (l: Lang) => void;
@@ -33,6 +48,18 @@ export function BrProvider({ children }: { children: React.ReactNode }) {
   const [personaId, setPersonaId] = useState<PersonaId>("brand");
   const [scenarioId, setScenarioId] = useState<ScenarioId>("viral");
   const [autopost, setAutopost] = useState(true);
+  const [account, setAccount] = useState<Account | null>(null);
+
+  const reloadAccount = useCallback(async () => {
+    const token = await getToken();
+    if (!token) { setAccount(null); return; }
+    try {
+      setAccount(await apiGet("/auth/me"));
+    } catch {
+      setAccount(null);
+    }
+  }, []);
+  useEffect(() => { reloadAccount(); }, [reloadAccount]);
 
   const value = useMemo<BrContextValue>(() => ({
     theme: buildTheme(themeKey, accentKey),
@@ -43,13 +70,15 @@ export function BrProvider({ children }: { children: React.ReactNode }) {
     persona: BR_PERSONAS[personaId],
     scenario: BR_SCENARIOS[scenarioId],
     autopost,
+    account,
+    reloadAccount,
     setThemeKey,
     setAccentKey,
     setLang,
     setPersonaId,
     setScenarioId,
     setAutopost,
-  }), [themeKey, accentKey, lang, personaId, scenarioId, autopost]);
+  }), [themeKey, accentKey, lang, personaId, scenarioId, autopost, account, reloadAccount]);
 
   return <BrCtx.Provider value={value}>{children}</BrCtx.Provider>;
 }

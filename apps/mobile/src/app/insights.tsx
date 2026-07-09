@@ -98,6 +98,11 @@ export default function InsightsScreen() {
             </GlassPanel>
           ))}
         </View>
+        {!hasLiveData && (
+          <Text style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 1, marginTop: 8, textTransform: "uppercase" }}>
+            {lang === "en" ? "Sample numbers — post something to see real stats" : "Contoh angka — posting dulu untuk lihat statistik asli"}
+          </Text>
+        )}
 
         {/* Performa terbaik */}
         <Eyebrow color={theme.ink3}>{t.insights.top}</Eyebrow>

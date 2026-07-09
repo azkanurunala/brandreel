@@ -17,7 +17,7 @@ import { FONT } from "@/components/br/fonts";
 import { loginWithGoogle } from "@/lib/googleAuth";
 
 export default function LoginScreen() {
-  const { theme, lang, t } = useBr();
+  const { theme, lang, t, reloadAccount } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = t.login;
@@ -27,7 +27,7 @@ export default function LoginScreen() {
     setBusy("google");
     try {
       const ok = await loginWithGoogle();
-      if (ok) router.replace("/home");
+      if (ok) { await reloadAccount(); router.replace("/home"); }
       else Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", lang === "en" ? "Try again." : "Coba lagi.");
     } catch (e: any) {
       Alert.alert(lang === "en" ? "Login failed" : "Gagal masuk", e.message ?? String(e));

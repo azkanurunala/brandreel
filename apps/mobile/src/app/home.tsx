@@ -82,16 +82,39 @@ function CampaignCard({ c, onPress }: { c: Campaign; onPress: () => void }) {
   );
 }
 
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+interface InsightsTotal { views: number; likes: number; comments: number; shares: number; reach: number }
+
 export default function HomeScreen() {
-  const { theme, lang, t, persona, scenario } = useBr();
+  const { theme, lang, t, persona, scenario, account } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const kpis = [
-    { v: scenario.impressions, l: t.home.impressions },
-    { v: scenario.eng, l: t.home.engagement },
-    { v: scenario.reach, l: t.home.reach },
-  ];
+  // KPI nyata dari GET /insights kalau sudah ada data; kalau akun masih baru
+  // (belum ada tayangan sama sekali), tampilkan contoh demo dengan label
+  // SAMPLE — biar jelas itu bukan angka akun ini (bukan angka nyata disamarkan).
+  const [liveTotal, setLiveTotal] = useState<InsightsTotal | null>(null);
+  useEffect(() => {
+    apiGet("/insights").then((res) => setLiveTotal(res.total)).catch(() => setLiveTotal(null));
+  }, []);
+  const hasLiveData = !!liveTotal && liveTotal.views > 0;
+
+  const kpis = hasLiveData
+    ? [
+        { v: fmtCompact(liveTotal!.views), l: t.home.impressions },
+        { v: `${((liveTotal!.likes + liveTotal!.comments + liveTotal!.shares) / Math.max(1, liveTotal!.views) * 100).toFixed(1)}%`, l: t.home.engagement },
+        { v: fmtCompact(liveTotal!.reach), l: t.home.reach },
+      ]
+    : [
+        { v: scenario.impressions, l: t.home.impressions },
+        { v: scenario.eng, l: t.home.engagement },
+        { v: scenario.reach, l: t.home.reach },
+      ];
 
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const loadCampaigns = useCallback(async () => {
@@ -136,10 +159,12 @@ export default function HomeScreen() {
               transform: [{ scale: pressed ? 0.95 : 1 }],
             })}>
             <View style={{ width: 20, height: 20, borderRadius: 999, backgroundColor: persona.color, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "#fff" }}>{persona.initial}</Text>
+              <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "#fff" }}>
+                {account ? (account.name?.[0] ?? account.email[0]).toUpperCase() : persona.initial}
+              </Text>
             </View>
             <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, letterSpacing: 0.8, color: theme.ink2 }}>
-              {persona.plan_label.toUpperCase()}
+              {account ? account.plan.toUpperCase() : persona.plan_label.toUpperCase()}
             </Text>
           </Pressable>
         </View>
@@ -151,14 +176,21 @@ export default function HomeScreen() {
         <Text style={{ fontFamily: FONT.display, fontSize: 28, color: theme.ink, lineHeight: 30, letterSpacing: -0.9, marginTop: 6 }}>
           {brGreet(lang, timeKeyNow())},{"\n"}
           <Text style={{ color: theme.brand, fontStyle: "italic", fontFamily: FONT.displayMed }}>
-            {persona.name.split(" ")[0]}.
+            {(account ? (account.name ?? account.email) : persona.name).split(" ")[0]}.
           </Text>
         </Text>
-        <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink2, marginTop: 8, lineHeight: 19.5 }}>
-          {lang === "en" ? scenario.summary_en : scenario.summary_id}
-        </Text>
+        {!hasLiveData && (
+          <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink2, marginTop: 8, lineHeight: 19.5 }}>
+            {lang === "en" ? scenario.summary_en : scenario.summary_id}
+          </Text>
+        )}
 
-        {/* Kartu KPI */}
+        {/* Kartu KPI — angka nyata dari /insights, atau contoh SAMPLE kalau akun belum punya data tayang */}
+        {!hasLiveData && (
+          <Text style={{ fontFamily: FONT.mono, fontSize: 8.5, color: theme.ink3, letterSpacing: 1, marginTop: 14, textTransform: "uppercase" }}>
+            {lang === "en" ? "Sample numbers — post something to see real stats" : "Contoh angka — posting dulu untuk lihat statistik asli"}
+          </Text>
+        )}
         <View style={{ flexDirection: "row", gap: 9, marginTop: 18 }}>
           {kpis.map((s, i) => (
             <GlassPanel key={i} theme={theme} padding={13} tone="solid" style={{ flex: 1 }}>

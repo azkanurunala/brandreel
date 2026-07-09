@@ -65,7 +65,7 @@ function ProgressBar({ pct, colors, track }: { pct: number; colors: [string, str
 }
 
 export default function ProfileScreen() {
-  const { theme, lang, t, persona, setPersonaId } = useBr();
+  const { theme, lang, t, persona, setPersonaId, account, reloadAccount } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [connections, setConnections] = useState<LiveConnection[] | null>(null);
@@ -120,20 +120,24 @@ export default function ProfileScreen() {
       <BrAppHeader title={t.profile.title} subtitle="ACCOUNT · RBAC" onBack={() => router.back()} />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28 }}>
-        {/* Kartu persona */}
+        {/* Kartu akun — data nyata dari GET /auth/me kalau sudah login */}
         <LinearGradient colors={[theme.brandDk, theme.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={{ padding: 18, borderRadius: 18 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
             <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: persona.color, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontFamily: FONT.display, fontSize: 18, color: "#fff" }}>{persona.initial}</Text>
+              <Text style={{ fontFamily: FONT.display, fontSize: 18, color: "#fff" }}>
+                {account ? (account.name?.[0] ?? account.email[0]).toUpperCase() : persona.initial}
+              </Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: "rgba(255,255,255,0.85)", letterSpacing: 1.2, textTransform: "uppercase" }}>
-                {lang === "en" ? persona.role_en : persona.role_id}
+                {account ? account.role : (lang === "en" ? persona.role_en : persona.role_id)}
               </Text>
-              <Text style={{ fontFamily: FONT.display, fontSize: 21, color: "#fff", marginTop: 3, letterSpacing: -0.4 }}>{persona.name}</Text>
+              <Text style={{ fontFamily: FONT.display, fontSize: 21, color: "#fff", marginTop: 3, letterSpacing: -0.4 }}>
+                {account ? (account.name ?? account.email) : persona.name}
+              </Text>
               <Text style={{ fontFamily: FONT.sans, fontSize: 11.5, color: "rgba(255,255,255,0.8)", marginTop: 3 }}>
-                {persona.handle} · {lang === "en" ? persona.bio_en : persona.bio_id}
+                {account ? account.email : `${persona.handle} · ${lang === "en" ? persona.bio_en : persona.bio_id}`}
               </Text>
             </View>
           </View>
@@ -144,8 +148,12 @@ export default function ProfileScreen() {
         <GlassPanel theme={theme} padding={15}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
-              <Text style={{ fontFamily: FONT.display, fontSize: 18, color: theme.ink, letterSpacing: -0.3 }}>{persona.plan_label}</Text>
-              <Text style={{ fontFamily: FONT.mono, fontSize: 9.5, color: theme.ink3, letterSpacing: 0.6, marginTop: 2 }}>{persona.price}</Text>
+              <Text style={{ fontFamily: FONT.display, fontSize: 18, color: theme.ink, letterSpacing: -0.3 }}>
+                {account ? account.plan.toUpperCase() : persona.plan_label}
+              </Text>
+              {!account && (
+                <Text style={{ fontFamily: FONT.mono, fontSize: 9.5, color: theme.ink3, letterSpacing: 0.6, marginTop: 2 }}>{persona.price}</Text>
+              )}
             </View>
             <Pressable style={({ pressed }) => ({
               borderWidth: 1, borderColor: theme.brand, backgroundColor: theme.brand + "12",
@@ -158,27 +166,33 @@ export default function ProfileScreen() {
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 14, marginBottom: 6 }}>
             <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.8, textTransform: "uppercase" }}>
-              {lang === "en" ? "Posts this month" : "Post bulan ini"}
+              {lang === "en" ? "Post quota" : "Jatah post"}
             </Text>
             <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: theme.ink2 }}>
-              {persona.posts_used}/{persona.posts_quota === Infinity ? "∞" : persona.posts_quota}
+              {account
+                ? (lang === "en" ? `${account.postQuota} / period` : `${account.postQuota} / periode`)
+                : `${persona.posts_used}/${persona.posts_quota === Infinity ? "∞" : persona.posts_quota}`}
             </Text>
           </View>
-          <ProgressBar pct={usedPct} colors={[theme.brand, theme.accent]} track={theme.hair} />
+          {!account && <ProgressBar pct={usedPct} colors={[theme.brand, theme.accent]} track={theme.hair} />}
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 15, marginBottom: 6 }}>
-            <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.8, textTransform: "uppercase" }}>
-              {lang === "en" ? "AI video renders · Veo" : "Render video AI · Veo"}
-            </Text>
-            <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: veoPct > 0.85 ? theme.warn : theme.ink2 }}>
-              {persona.veo_used}/{persona.veo_quota}
-            </Text>
-          </View>
-          <ProgressBar
-            pct={veoPct}
-            colors={veoPct > 0.85 ? [theme.warn, theme.neg] : [theme.brand, theme.accent]}
-            track={theme.hair}
-          />
+          {!account && (
+            <>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 15, marginBottom: 6 }}>
+                <Text style={{ fontFamily: FONT.mono, fontSize: 9, color: theme.ink3, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                  {lang === "en" ? "AI video renders · Veo" : "Render video AI · Veo"}
+                </Text>
+                <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9.5, color: veoPct > 0.85 ? theme.warn : theme.ink2 }}>
+                  {persona.veo_used}/{persona.veo_quota}
+                </Text>
+              </View>
+              <ProgressBar
+                pct={veoPct}
+                colors={veoPct > 0.85 ? [theme.warn, theme.neg] : [theme.brand, theme.accent]}
+                track={theme.hair}
+              />
+            </>
+          )}
         </GlassPanel>
 
         {/* Akun terhubung — data nyata dari GET /connections */}
@@ -383,6 +397,7 @@ export default function ProfileScreen() {
           <GhostButton theme={theme} onPress={async () => {
             try { await apiPost("/auth/logout", {}); } catch { /* token mungkin sudah invalid — tetap lanjut hapus lokal */ }
             await clearToken();
+            await reloadAccount();
             router.replace("/login");
           }}>
             <Text style={{ color: theme.neg }}>{t.profile.signout}</Text>
