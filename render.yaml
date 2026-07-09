@@ -41,8 +41,12 @@ services:
       # --- Keamanan ---
       - key: SESSION_SIGNING_KEY
         generateValue: true
+      # TOKEN_ENCRYPTION_KEY sengaja BUKAN generateValue: worker & cron juga
+      # butuh mendekripsi token yang dienkripsi API — kalau tiap service
+      # generate sendiri, kuncinya beda-beda dan decrypt bakal gagal.
+      # Isi NILAI YANG SAMA di ketiga service (API/worker/cron) — Bab 15.
       - key: TOKEN_ENCRYPTION_KEY
-        generateValue: true
+        sync: false
       # --- Alamat aplikasi ---
       - key: APP_BASE_URL
         sync: false
@@ -89,7 +93,7 @@ services:
         sync: false
 
   # ---------- 2. Worker (Background Worker) ----------
-  # Menjalankan antrean BullMQ: publish pipeline & pengiriman video.
+  # Menjalankan antrean BullMQ: render Veo (Bab 03) + publish pipeline (Bab 05).
   - type: worker
     name: brandreel-worker
     runtime: node
@@ -110,8 +114,21 @@ services:
           name: brandreel-redis
           property: connectionString
       - key: TOKEN_ENCRYPTION_KEY
+        sync: false # SAMA PERSIS dengan nilai di service brandreel-api
+      - key: GEMINI_API_KEY
         sync: false
-      # (tambahkan env platform/storage yang worker butuhkan, sama seperti API)
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_REGION
+        sync: false
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: CDN_BASE_URL
+        sync: false
 
   # ---------- 3. Cron Job (Insights + refresh token) ----------
   # Berjalan berkala; logika cadence detail ada di dalam kode (Bab 06).
@@ -135,6 +152,8 @@ services:
           type: keyvalue
           name: brandreel-redis
           property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false # SAMA PERSIS dengan nilai di service brandreel-api
 
   # ---------- 4. Redis (Key Value) ----------
   - type: keyvalue
