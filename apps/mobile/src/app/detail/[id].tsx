@@ -4,9 +4,10 @@
 // Pratinjau video tetap kartu gradasi — render Veo asli disambung di layar
 // terpisah begitu worker/render selesai (lihat apps/api/src/worker.ts).
 
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +22,16 @@ import { GlassChip, GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { ScheduleSheet } from "@/components/br/ScheduleSheet";
 import { FONT } from "@/components/br/fonts";
+
+interface RenderRow {
+  id: string;
+  hookId: string | null;
+  ratio: string;
+  state: "queued" | "processing" | "ready" | "failed";
+  storageUrl: string | null;
+  durationS: number | null;
+  error: string | null;
+}
 
 function Eyebrow({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -105,6 +116,50 @@ export default function DetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey, hasAI, backendId, plat]);
 
+  // Render video Veo nyata (Bab 03) — daftar render campaign ini, di-poll
+  // selama ada yang masih queued/processing (worker.ts yang benar-benar
+  // memprosesnya di background).
+  const [renders, setRenders] = useState<RenderRow[] | null>(null);
+  const [generatingRender, setGeneratingRender] = useState(false);
+
+  const loadRenders = useCallback(async () => {
+    if (!backendId) return;
+    try { setRenders(await apiGet(`/campaigns/${backendId}/renders`)); }
+    catch { /* biarkan state sebelumnya kalau gagal — jangan reset ke kosong */ }
+  }, [backendId]);
+
+  useEffect(() => { loadRenders(); }, [loadRenders]);
+
+  useEffect(() => {
+    if (!renders?.some((r) => r.state === "queued" || r.state === "processing")) return;
+    const timer = setInterval(loadRenders, 4000);
+    return () => clearInterval(timer);
+  }, [renders, loadRenders]);
+
+  const activeRatio = plat ? BR_PLATFORMS[plat].ratio : null;
+  const activeRender = renders?.find((r) => r.ratio === activeRatio) ?? null;
+
+  const player = useVideoPlayer(
+    activeRender?.state === "ready" && activeRender.storageUrl ? activeRender.storageUrl : null,
+    (p) => { p.loop = true; }
+  );
+  useEffect(() => {
+    if (activeRender?.state === "ready") player.play();
+  }, [activeRender?.id, activeRender?.state, player]);
+
+  async function handleGenerateRender() {
+    if (!backendId || !activeRatio) return;
+    setGeneratingRender(true);
+    try {
+      await apiPost(`/campaigns/${backendId}/renders`, { hookId: aiHook?.id, ratio: activeRatio });
+      await loadRenders();
+    } catch (e: any) {
+      Alert.alert(lang === "en" ? "Couldn't start render" : "Gagal mulai render", e.message ?? String(e));
+    } finally {
+      setGeneratingRender(false);
+    }
+  }
+
   if (!c || !plat) {
     return (
       <BrAppShell theme={theme} density="soft">
@@ -179,29 +234,58 @@ export default function DetailScreen() {
 
         {/* Pratinjau video + tab platform */}
         <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
-          <LinearGradient
-            colors={[hk.color, c.logoColor]}
-            start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 1 }}
-            style={{
-              width: 108, aspectRatio: previewAspect, borderRadius: 14, overflow: "hidden",
-              alignItems: "center", justifyContent: "center",
-            }}>
-            <View style={{ position: "absolute", top: 8, left: 8 }}>
-              <PlatformBadge pid={plat} size={22} solid />
-            </View>
-            <Text style={{ fontFamily: FONT.display, color: "rgba(255,255,255,0.85)", fontSize: 30, letterSpacing: -1 }}>
-              {c.logoGlyph}
-            </Text>
-            <Svg width={26} height={26} viewBox="0 0 24 24" style={{ position: "absolute" }}>
-              <Circle cx={12} cy={12} r={11} fill="rgba(0,0,0,0.28)" />
-              <Path d="M9 7l9 5-9 5z" fill="#fff" />
-            </Svg>
-            <View style={{ position: "absolute", bottom: 7, alignSelf: "center", backgroundColor: "rgba(0,0,0,0.42)", paddingVertical: 2, paddingHorizontal: 6, borderRadius: 999 }}>
-              <Text style={{ fontFamily: FONT.mono, fontSize: 8, color: "rgba(255,255,255,0.92)", letterSpacing: 0.6 }}>
-                {platMeta.ratio} · {hook === "h5" ? 4 : 5}s
-              </Text>
-            </View>
-          </LinearGradient>
+          <View style={{ width: 108, aspectRatio: previewAspect, borderRadius: 14, overflow: "hidden" }}>
+            {activeRender?.state === "ready" && activeRender.storageUrl ? (
+              <VideoView player={player} style={{ width: "100%", height: "100%" }} contentFit="cover" nativeControls={false} />
+            ) : (
+              <LinearGradient
+                colors={[hk.color, c.logoColor]}
+                start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 1 }}
+                style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
+                <View style={{ position: "absolute", top: 8, left: 8 }}>
+                  <PlatformBadge pid={plat} size={22} solid />
+                </View>
+
+                {activeRender?.state === "queued" || activeRender?.state === "processing" ? (
+                  <>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "rgba(255,255,255,0.9)", letterSpacing: 0.6, marginTop: 8, textTransform: "uppercase" }}>
+                      {activeRender.state === "queued" ? (lang === "en" ? "Queued" : "Antre") : (lang === "en" ? "Rendering…" : "Merender…")}
+                    </Text>
+                  </>
+                ) : activeRender?.state === "failed" ? (
+                  <Pressable onPress={handleGenerateRender} disabled={generatingRender} style={{ alignItems: "center", padding: 8 }}>
+                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "#fff", letterSpacing: 0.6, textAlign: "center" }}>
+                      {lang === "en" ? "Failed — tap to retry" : "Gagal — ketuk ulang"}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={handleGenerateRender} disabled={generatingRender || !backendId}
+                    style={{ alignItems: "center", padding: 8, opacity: !backendId ? 0.5 : 1 }}>
+                    {generatingRender ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <Svg width={26} height={26} viewBox="0 0 24 24">
+                          <Circle cx={12} cy={12} r={11} fill="rgba(0,0,0,0.28)" />
+                          <Path d="M9 7l9 5-9 5z" fill="#fff" />
+                        </Svg>
+                        <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8, color: "rgba(255,255,255,0.9)", letterSpacing: 0.6, marginTop: 6, textAlign: "center" }}>
+                          {lang === "en" ? "Generate video" : "Buat video"}
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+
+                <View style={{ position: "absolute", bottom: 7, alignSelf: "center", backgroundColor: "rgba(0,0,0,0.42)", paddingVertical: 2, paddingHorizontal: 6, borderRadius: 999 }}>
+                  <Text style={{ fontFamily: FONT.mono, fontSize: 8, color: "rgba(255,255,255,0.92)", letterSpacing: 0.6 }}>
+                    {platMeta.ratio} · {hook === "h5" ? 4 : 5}s
+                  </Text>
+                </View>
+              </LinearGradient>
+            )}
+          </View>
 
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: "row", gap: 5, flexWrap: "wrap" }}>
