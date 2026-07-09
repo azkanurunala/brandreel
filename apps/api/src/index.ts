@@ -19,9 +19,18 @@ const app = express();
 // --- Middleware dasar ---
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+// CORS: WEB_APP_URL (Bab 15) + dev ports Expo + semua *.vercel.app (produksi
+// & preview deploy web app pakai domain vercel.app yang beda tiap deploy).
+const ALLOWED_ORIGINS = [env.WEB_APP_URL, "http://localhost:8081", "http://localhost:19006"];
 app.use(
   cors({
-    origin: [env.WEB_APP_URL, "http://localhost:8081", "http://localhost:19006"],
+    origin(origin, callback) {
+      if (!origin) return callback(null, true); // request non-browser (curl, server-to-server)
+      if (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(new URL(origin).hostname)) {
+        return callback(null, true);
+      }
+      callback(new Error(`CORS: origin ${origin} tidak diizinkan`));
+    },
     credentials: true,
   })
 );
