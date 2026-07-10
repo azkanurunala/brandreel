@@ -9,17 +9,11 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr } from "@/context/BrContext";
 import { BR_PLATFORMS, BR_PLATFORM_ORDER, type PlatformId } from "@/theme/tokens";
-
-// Enum backend cuma kenal "x", bukan "twitter" (id internal frontend —
-// samakan dengan onboard.tsx/profile.tsx yang connect OAuth platform).
-function toBackendPlatform(pid: PlatformId): string {
-  return pid === "twitter" ? "x" : pid;
-}
 import { BrAppShell, BrAppHeader, FloatingActionBar, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassPanel } from "@/components/br/Glass";
 import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { FONT } from "@/components/br/fonts";
-import { setPendingCampaign, setPendingBackend, type GenerateResult } from "@/data/pendingCampaign";
+import { setPendingCampaign, getPendingCampaign, runGenerate } from "@/data/pendingCampaign";
 import { apiGet, apiPost } from "@/lib/api";
 import { pickAndUploadImage } from "@/lib/imageUpload";
 
@@ -125,37 +119,16 @@ export default function CreateScreen() {
         hashtags: [], // diisi Claude nyata begitu /generate selesai — jangan tebak-tebak per produk
         platforms: Object.fromEntries(plats.map((p) => [p, { state: "queued" as const }])),
       },
-      input: { product: productName, desc: desc.trim(), voice, platforms: plats, lang },
+      input: {
+        product: productName, desc: desc.trim(), voice, platforms: plats, lang,
+        brandKitId: selectedKitId ?? undefined,
+        productImageUrl: productImageUrl ?? undefined,
+      },
     });
 
-    // Mulai panggilan backend nyata; promise ditunggu di layar generating.
-    let createdId = "pending";
-    async function runGenerate(): Promise<GenerateResult | null> {
-      try {
-        const campaign = await apiPost("/campaigns", {
-          product: productName,
-          description: desc.trim() || undefined,
-          productImageUrl: productImageUrl ?? undefined,
-          brandKitId: selectedKitId ?? undefined,
-          platforms: plats.map(toBackendPlatform),
-        });
-        createdId = campaign.id;
-        const gen = await apiPost(`/campaigns/${campaign.id}/generate`, { lang, voice: voice.trim() || undefined });
-        const hooks = Object.fromEntries(
-          (gen.hooks as { id: string; label: string; script: string; caption: string }[]).map((h) => [
-            h.label,
-            { id: h.id, script: h.script, caption: h.caption },
-          ])
-        ) as GenerateResult["hooks"];
-        return { hooks, hashtags: gen.hashtags as string[] };
-      } catch (e) {
-        console.warn("Generate backend gagal, pakai fallback lokal:", e);
-        return null;
-      }
-    }
-    const promise = runGenerate();
-    setPendingBackend(createdId, promise);
-    promise.then(() => setPendingBackend(createdId, promise));
+    // Panggilan backend nyata (create+generate) — promise ditunggu di layar
+    // generating, yang menampilkan error+retry kalau gagal (bukan fallback diam-diam).
+    runGenerate(getPendingCampaign()!.input);
 
     router.push("/generating");
   }

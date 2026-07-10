@@ -8,9 +8,9 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr } from "@/context/BrContext";
-import { BrAppShell, PrimaryButton } from "@/components/br/AppChrome";
+import { BrAppShell, PrimaryButton, GhostButton } from "@/components/br/AppChrome";
 import { FONT } from "@/components/br/fonts";
-import { getPendingCampaign } from "@/data/pendingCampaign";
+import { getPendingCampaign, runGenerate } from "@/data/pendingCampaign";
 
 const RADIUS = 58;
 const CIRC = 2 * Math.PI * RADIUS;
@@ -32,18 +32,32 @@ export default function GeneratingScreen() {
   const [pct, setPct] = useState(0);
   const aiSettledRef = useRef(false);
   const [aiFailed, setAiFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
-  // Tunggu promise generate nyata yang dimulai di create.tsx (Claude via /generate).
-  // Promise ini tidak pernah reject (create.tsx catch-nya balikin null) — jadi
-  // hasil null berarti Claude beneran gagal, bukan cuma "belum selesai".
+  // Tunggu promise generate nyata (dibikin di create.tsx, atau di sini lagi
+  // kalau user pencet "Coba lagi"). Promise ini tidak pernah reject — hasil
+  // null berarti backend/Claude beneran gagal, harus ditampilkan sebagai
+  // error+retry, BUKAN diloloskan diam-diam ke layar detail (fallback lama).
+  function waitFor(promise: Promise<unknown>) {
+    aiSettledRef.current = false;
+    promise.then((r) => { if (!r) setAiFailed(true); else setAiFailed(false); });
+    promise.finally(() => { aiSettledRef.current = true; });
+  }
+
   useEffect(() => {
-    let alive = true;
     const pending = getPendingCampaign();
-    const promise = pending?.generatePromise ?? Promise.resolve(null);
-    promise.then((r) => { if (alive && !r) setAiFailed(true); });
-    promise.finally(() => { if (alive) aiSettledRef.current = true; });
-    return () => { alive = false; };
+    waitFor(pending?.generatePromise ?? Promise.resolve(null));
   }, []);
+
+  function retry() {
+    const pending = getPendingCampaign();
+    if (!pending || retrying) return;
+    setRetrying(true);
+    setAiFailed(false);
+    const promise = runGenerate(pending.input);
+    waitFor(promise);
+    promise.finally(() => setRetrying(false));
+  }
 
   useEffect(() => {
     const start = Date.now();
@@ -136,14 +150,25 @@ export default function GeneratingScreen() {
       </View>
 
       <View style={{ paddingHorizontal: 22, paddingTop: 10, paddingBottom: 18 + insets.bottom }}>
-        {allDone ? (
+        {allDone && aiFailed ? (
+          <View style={{ gap: 10 }}>
+            <PrimaryButton theme={theme} onPress={retry}>
+              {retrying
+                ? (lang === "en" ? "Retrying…" : "Mencoba lagi…")
+                : (lang === "en" ? "Retry" : "Coba lagi")}
+            </PrimaryButton>
+            <GhostButton theme={theme} onPress={() => router.replace("/create")}>
+              {lang === "en" ? "Edit campaign" : "Ubah kampanye"}
+            </GhostButton>
+          </View>
+        ) : allDone ? (
           <PrimaryButton theme={theme} onPress={() => {
             // Rute lewat id backend asli begitu tersedia, bukan selalu
             // "__new" — "__new" cuma baca state in-memory yang hilang kalau
             // halaman di-reload, jadi jadi jalan buntu permanen kalau dipakai
             // terus (lihat catatan di detail/[id].tsx).
             const backendId = getPendingCampaign()?.backendId;
-            router.replace((backendId && backendId !== "pending" ? `/detail/${backendId}` : "/detail/__new") as never);
+            router.replace((backendId ? `/detail/${backendId}` : "/detail/__new") as never);
           }}>{g.review} →</PrimaryButton>
         ) : (
           <Text style={{
