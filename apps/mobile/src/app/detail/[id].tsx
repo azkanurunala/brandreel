@@ -6,13 +6,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { useBr, brStatusMeta } from "@/context/BrContext";
-import { BR_HOOKS, BR_HOOK_ORDER, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
+import { BR_HOOKS, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
 import { brBuildCaption, type Campaign, type PreflightRow } from "@/data/campaigns";
 import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
 import { apiGet, apiPost } from "@/lib/api";
@@ -20,8 +18,11 @@ import { Alert } from "@/lib/alert";
 import { toViewCampaign, hooksToGenerateResult, type ApiCampaign } from "@/lib/campaignView";
 import { BrAppShell, BrAppHeader, FloatingActionBar, GhostButton, PrimaryButton } from "@/components/br/AppChrome";
 import { GlassChip, GlassPanel } from "@/components/br/Glass";
-import { PlatformBadge } from "@/components/br/BrandGlyph";
 import { ScheduleSheet } from "@/components/br/ScheduleSheet";
+import { VideoHero } from "@/components/br/VideoHero";
+import { PlatformPicker, type RenderBadgeState } from "@/components/br/PlatformPicker";
+import { HookPicker } from "@/components/br/HookPicker";
+import { PreflightPanel } from "@/components/br/PreflightPanel";
 import { FONT } from "@/components/br/fonts";
 
 interface RenderRow {
@@ -156,17 +157,47 @@ export default function DetailScreen() {
     if (activeRender?.state === "ready") player.play();
   }, [activeRender?.id, activeRender?.state, player]);
 
-  async function handleGenerateRender() {
-    if (!backendId || !activeRatio) return;
+  // Render dikunci per rasio, bukan per platform — TikTok/IG/YouTube yang
+  // sama-sama 9:16 berbagi satu render. "Buat semua video" cukup render tiap
+  // rasio YANG BEDA sekali jalan, bukan sekali per platform.
+  function ratioOf(pid: PlatformId) { return BR_PLATFORMS[pid].ratio; }
+  function renderForRatio(ratio: string) { return renders?.find((r) => r.ratio === ratio) ?? null; }
+  const neededRatios = useMemo(
+    () => Array.from(new Set(camPlatforms.map(ratioOf))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [camPlatforms]
+  );
+
+  async function handleGenerateAllRenders() {
+    if (!backendId) return;
+    const missing = neededRatios.filter((ratio) => {
+      const s = renderForRatio(ratio)?.state;
+      return s !== "ready" && s !== "queued" && s !== "processing";
+    });
+    if (!missing.length) return;
     setGeneratingRender(true);
     try {
-      await apiPost(`/campaigns/${backendId}/renders`, { hookId: aiHook?.id, ratio: activeRatio });
+      const results = await Promise.allSettled(
+        missing.map((ratio) => apiPost(`/campaigns/${backendId}/renders`, { hookId: aiHook?.id, ratio }))
+      );
       await loadRenders();
-    } catch (e: any) {
-      Alert.alert(lang === "en" ? "Couldn't start render" : "Gagal mulai render", e.message ?? String(e));
+      if (results.every((r) => r.status === "rejected")) {
+        Alert.alert(
+          lang === "en" ? "Couldn't start render" : "Gagal mulai render",
+          lang === "en" ? "None of the videos could start rendering." : "Gak ada video yang berhasil mulai di-render."
+        );
+      }
     } finally {
       setGeneratingRender(false);
     }
+  }
+
+  function statusFor(pid: PlatformId): RenderBadgeState {
+    const r = renderForRatio(ratioOf(pid));
+    if (!r) return null;
+    if (r.state === "ready") return "ready";
+    if (r.state === "failed") return "failed";
+    return "pending";
   }
 
   if (!c || !plat) {
@@ -226,139 +257,53 @@ export default function DetailScreen() {
       />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 20 }}>
-        {/* Pemilih sudut hook */}
-        <View style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
+        {/* Video — hero penuh lebar, CTA render paling penting di halaman ini */}
+        <VideoHero
+          theme={theme}
+          lang={lang}
+          activeRender={activeRender}
+          previewAspect={previewAspect}
+          hookColor={hk.color}
+          logoColor={c.logoColor}
+          plat={plat}
+          ratioLabel={platMeta.ratio}
+          durationLabel={`${hook === "h5" ? 4 : 5}s`}
+          generatingRender={generatingRender}
+          onBulkRender={handleGenerateAllRenders}
+          onOpenModal={() => setVideoModalOpen(true)}
+          player={player}
+        />
+
+        {/* Platform tujuan (rasio + status render) + info format */}
+        <View style={{ flexDirection: "row", gap: 12, marginTop: 14, alignItems: "flex-start" }}>
+          <View style={{ flex: 1 }}>
+            <PlatformPicker
+              theme={theme}
+              platforms={camPlatforms}
+              active={plat}
+              statusFor={statusFor}
+              onSelect={setPlat}
+            />
+          </View>
+          <View style={{ gap: 6, minWidth: 112, paddingTop: 4 }}>
+            {[
+              { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
+              { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
+              { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
+            ].map((r, i) => (
+              <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
+                <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Pemilih sudut cerita — beda fungsi dari platform di atas (skrip, bukan tujuan) */}
+        <View style={{ paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8 }}>
           <Eyebrow color={theme.ink3}>{t.detail.hooks} · 5</Eyebrow>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingBottom: 4 }}>
-          {BR_HOOK_ORDER.map((hid) => {
-            const h = BR_HOOKS[hid];
-            const on = hid === hook;
-            const isTop = hid === c.topHook;
-            return (
-              <Pressable key={hid} onPress={() => setHook(hid)}
-                style={({ pressed }) => ({
-                  borderWidth: 1, borderColor: on ? h.color : theme.hair,
-                  backgroundColor: on ? h.color + "14" : theme.glassHi,
-                  borderRadius: 13, paddingVertical: 9, paddingHorizontal: 12, minWidth: 124,
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                })}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-                  <View style={{ width: 22, height: 22, borderRadius: 7, backgroundColor: h.color, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: "#fff" }}>{h.glyph}</Text>
-                  </View>
-                  <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: on ? h.color : theme.ink3, letterSpacing: 0.6 }}>
-                    HOOK {h.num}
-                  </Text>
-                  {isTop && <Text style={{ marginLeft: "auto", fontSize: 10, color: theme.warn }}>★</Text>}
-                </View>
-                <Text style={{ fontFamily: FONT.sansSemi, fontSize: 12, color: theme.ink, marginTop: 6, lineHeight: 13 }}>
-                  {lang === "en" ? h.key_en : h.key_id}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {/* Pratinjau video + tab platform */}
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
-          <View style={{ width: 108, aspectRatio: previewAspect, borderRadius: 14, overflow: "hidden" }}>
-            {activeRender?.state === "ready" && activeRender.storageUrl ? (
-              <Pressable onPress={() => setVideoModalOpen(true)} style={{ width: "100%", height: "100%" }}>
-                <VideoView player={player} style={{ width: "100%", height: "100%" }} contentFit="cover" nativeControls={false} />
-                <View style={{
-                  position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 999,
-                  backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
-                  </Svg>
-                </View>
-              </Pressable>
-            ) : (
-              <LinearGradient
-                colors={[hk.color, c.logoColor]}
-                start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 1 }}
-                style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
-                <View style={{ position: "absolute", top: 8, left: 8 }}>
-                  <PlatformBadge pid={plat} size={22} solid />
-                </View>
-
-                {activeRender?.state === "queued" || activeRender?.state === "processing" ? (
-                  <>
-                    <ActivityIndicator color="#fff" />
-                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "rgba(255,255,255,0.9)", letterSpacing: 0.6, marginTop: 8, textTransform: "uppercase" }}>
-                      {activeRender.state === "queued" ? (lang === "en" ? "Queued" : "Antre") : (lang === "en" ? "Rendering…" : "Merender…")}
-                    </Text>
-                  </>
-                ) : activeRender?.state === "failed" ? (
-                  <Pressable onPress={handleGenerateRender} disabled={generatingRender} style={{ alignItems: "center", padding: 8 }}>
-                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8.5, color: "#fff", letterSpacing: 0.6, textAlign: "center" }}>
-                      {lang === "en" ? "Failed — tap to retry" : "Gagal — ketuk ulang"}
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Pressable onPress={handleGenerateRender} disabled={generatingRender || !backendId}
-                    style={{ alignItems: "center", padding: 8, opacity: !backendId ? 0.5 : 1 }}>
-                    {generatingRender ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Svg width={26} height={26} viewBox="0 0 24 24">
-                          <Circle cx={12} cy={12} r={11} fill="rgba(0,0,0,0.28)" />
-                          <Path d="M9 7l9 5-9 5z" fill="#fff" />
-                        </Svg>
-                        <Text style={{ fontFamily: FONT.monoSemi, fontSize: 8, color: "rgba(255,255,255,0.9)", letterSpacing: 0.6, marginTop: 6, textAlign: "center" }}>
-                          {lang === "en" ? "Generate video" : "Buat video"}
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                )}
-
-                <View style={{ position: "absolute", bottom: 7, alignSelf: "center", backgroundColor: "rgba(0,0,0,0.42)", paddingVertical: 2, paddingHorizontal: 6, borderRadius: 999 }}>
-                  <Text style={{ fontFamily: FONT.mono, fontSize: 8, color: "rgba(255,255,255,0.92)", letterSpacing: 0.6 }}>
-                    {platMeta.ratio} · {hook === "h5" ? 4 : 5}s
-                  </Text>
-                </View>
-              </LinearGradient>
-            )}
-          </View>
-
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={{ flexDirection: "row", gap: 5, flexWrap: "wrap" }}>
-              {camPlatforms.map((pid) => {
-                const p = BR_PLATFORMS[pid];
-                const on = pid === plat;
-                return (
-                  <Pressable key={pid} onPress={() => setPlat(pid)}
-                    style={({ pressed }) => ({
-                      borderWidth: 1, borderColor: on ? p.color : theme.hair,
-                      backgroundColor: on ? p.color + "16" : "transparent",
-                      paddingVertical: 5, paddingHorizontal: 9, borderRadius: 999,
-                      transform: [{ scale: pressed ? 0.95 : 1 }],
-                    })}>
-                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10, color: on ? p.color : theme.ink3, letterSpacing: 0.4 }}>
-                      {p.short}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={{ marginTop: 10, gap: 6 }}>
-              {[
-                { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
-                { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
-                { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
-              ].map((r, i) => (
-                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
-                  <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
+        <HookPicker theme={theme} lang={lang} active={hook} topHook={c.topHook} onSelect={setHook} />
 
         {/* Skrip hook AI (hanya bila hasil Claude nyata tersedia) */}
         {hasAI && aiHook?.script && (
@@ -393,52 +338,25 @@ export default function DetailScreen() {
           )}
         </GlassPanel>
 
-        {/* Pra-kirim */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
-          <Eyebrow color={theme.ink3}>{t.detail.preflight}</Eyebrow>
-          <GlassChip theme={theme} color={allClear ? theme.pos : theme.neg}>
-            {allClear
-              ? (lang === "en" ? "All clear" : "Semua aman")
-              : (() => {
-                  const n = preflight.filter((r) => !r.ok).length;
-                  return lang === "en" ? `${n} issue${n === 1 ? "" : "s"}` : `${n} masalah`;
-                })()}
-          </GlassChip>
-        </View>
-        <GlassPanel theme={theme} padding={4} tone="solid">
-          {preflight.map((r, i) => (
-            <View key={r.k} style={{
-              flexDirection: "row", alignItems: "center", gap: 11,
-              paddingVertical: 10, paddingHorizontal: 11,
-              borderTopWidth: i ? 1 : 0, borderTopColor: theme.hair2,
-            }}>
-              <View style={{
-                width: 20, height: 20, borderRadius: 999,
-                backgroundColor: r.ok ? theme.pos + "1E" : theme.neg + "1E",
-                borderWidth: 1, borderColor: (r.ok ? theme.pos : theme.neg) + "55",
-                alignItems: "center", justifyContent: "center",
-              }}>
-                {r.ok ? (
-                  <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={theme.pos} strokeWidth={3.2} strokeLinecap="round">
-                    <Path d="M4 12l5 5L20 6" />
-                  </Svg>
-                ) : (
-                  <Text style={{ color: theme.neg, fontSize: 12, fontFamily: FONT.sansXBold }}>!</Text>
-                )}
-              </View>
-              <Text style={{ flex: 1, fontFamily: FONT.sans, fontSize: 12, color: r.ok ? theme.ink2 : theme.neg, lineHeight: 16 }}>
-                {lang === "en" ? r.label_en : r.label_id}
-              </Text>
-            </View>
-          ))}
-        </GlassPanel>
+        {/* Pra-kirim — baris gagal bisa diketuk buat langsung ke perbaikannya */}
+        <PreflightPanel
+          theme={theme}
+          lang={lang}
+          title={t.detail.preflight}
+          rows={preflight}
+          allClear={allClear}
+          onFixRow={(k) => {
+            if (k === "format") handleGenerateAllRenders();
+            else if (k === "token") router.push("/profile");
+          }}
+        />
       </ScrollView>
 
       <FloatingActionBar>
         <GhostButton theme={theme} onPress={() => setSchedOpen(true)} style={{ paddingHorizontal: 16 }}>
           {t.detail.schedule}
         </GhostButton>
-        <PrimaryButton theme={theme} onPress={async () => {
+        <PrimaryButton theme={theme} disabled={!allClear} style={{ flex: 1 }} onPress={async () => {
           if (!backendId) { router.push(`/publishing/${c.id}`); return; }
           try {
             const res = await apiPost(`/campaigns/${backendId}/publish`, { hookId: aiHook?.id });
@@ -460,8 +378,15 @@ export default function DetailScreen() {
             return;
           }
           router.push(`/publishing/${c.id}`);
-        }} style={{ flex: 1 }}>
-          {t.detail.postNow} →
+        }}>
+          {allClear
+            ? `${t.detail.postNow} →`
+            : (() => {
+                const firstFailing = preflight.find((r) => !r.ok);
+                if (firstFailing?.k === "format") return lang === "en" ? "Render video first" : "Render video dulu";
+                if (firstFailing?.k === "token") return lang === "en" ? `Connect ${platMeta.name} first` : `Hubungkan ${platMeta.name} dulu`;
+                return t.detail.postNow;
+              })()}
         </PrimaryButton>
       </FloatingActionBar>
       <View style={{ height: insets.bottom }} />

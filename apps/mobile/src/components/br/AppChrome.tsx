@@ -98,16 +98,18 @@ export function BrAppHeader({ title, subtitle, color, onBack, right }: {
 }
 
 // Tombol utama — gradasi brand→accent, lebar penuh.
-export function PrimaryButton({ children, onPress, theme, colors, style }: {
+export function PrimaryButton({ children, onPress, theme, colors, style, disabled }: {
   children: React.ReactNode;
   onPress?: () => void;
   theme: Theme;
   colors?: [string, string];
   style?: StyleProp<ViewStyle>;
+  disabled?: boolean;
 }) {
   const [c1, c2] = colors ?? [theme.brand, theme.accent];
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.975 : 1 }] }, style]}>
+    <Pressable onPress={disabled ? undefined : onPress} disabled={disabled}
+      style={({ pressed }) => [{ transform: [{ scale: pressed && !disabled ? 0.975 : 1 }], opacity: disabled ? 0.55 : 1 }, style]}>
       <LinearGradient
         colors={[c1, c2]}
         start={{ x: 0, y: 0 }}
