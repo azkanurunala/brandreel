@@ -10,6 +10,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBr, brStatusMeta } from "@/context/BrContext";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { BR_HOOKS, BR_PLATFORMS, type HookId, type PlatformId } from "@/theme/tokens";
 import { brBuildCaption, type Campaign, type PreflightRow } from "@/data/campaigns";
 import { getPendingCampaign, type GenerateResult } from "@/data/pendingCampaign";
@@ -48,6 +49,7 @@ export default function DetailScreen() {
   const { theme, lang, t, persona } = useBr();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const isDesktop = useBreakpoint() === "desktop";
 
   const isNew = id === "__new";
   const pending = isNew ? getPendingCampaign() : null;
@@ -257,45 +259,59 @@ export default function DetailScreen() {
       />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 20 }}>
-        {/* Video — hero penuh lebar, CTA render paling penting di halaman ini */}
-        <VideoHero
-          theme={theme}
-          lang={lang}
-          activeRender={activeRender}
-          previewAspect={previewAspect}
-          hookColor={hk.color}
-          logoColor={c.logoColor}
-          plat={plat}
-          ratioLabel={platMeta.ratio}
-          durationLabel={`${hook === "h5" ? 4 : 5}s`}
-          generatingRender={generatingRender}
-          onBulkRender={handleGenerateAllRenders}
-          onOpenModal={() => setVideoModalOpen(true)}
-          player={player}
-        />
-
-        {/* Platform tujuan (rasio + status render) + info format */}
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 14, alignItems: "flex-start" }}>
-          <View style={{ flex: 1 }}>
-            <PlatformPicker
+        {/* Video — hero besar, CTA render paling penting di halaman ini.
+            Desktop: video 50% lebar, platform+info di sebelah kanan
+            (bukan ditumpuk di bawah — layar lebar sayang kalau video
+            dipaksa full-width). */}
+        <View style={{ flexDirection: isDesktop ? "row" : "column", gap: isDesktop ? 20 : 0, alignItems: "flex-start" }}>
+          <View style={{ width: isDesktop ? "50%" : "100%" }}>
+            <VideoHero
               theme={theme}
-              platforms={camPlatforms}
-              active={plat}
-              statusFor={statusFor}
-              onSelect={setPlat}
+              lang={lang}
+              activeRender={activeRender}
+              previewAspect={previewAspect}
+              hookColor={hk.color}
+              logoColor={c.logoColor}
+              plat={plat}
+              ratioLabel={platMeta.ratio}
+              durationLabel={`${hook === "h5" ? 4 : 5}s`}
+              generatingRender={generatingRender}
+              onBulkRender={handleGenerateAllRenders}
+              onOpenModal={() => setVideoModalOpen(true)}
+              player={player}
             />
           </View>
-          <View style={{ gap: 6, minWidth: 112, paddingTop: 4 }}>
-            {[
-              { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
-              { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
-              { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
-            ].map((r, i) => (
-              <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
-                <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
-              </View>
-            ))}
+
+          {/* Platform tujuan (rasio + status render) + info format */}
+          <View style={{
+            flex: isDesktop ? 1 : undefined,
+            width: isDesktop ? undefined : "100%",
+            flexDirection: "row",
+            gap: 12,
+            marginTop: isDesktop ? 0 : 14,
+            alignItems: "flex-start",
+          }}>
+            <View style={{ flex: 1 }}>
+              <PlatformPicker
+                theme={theme}
+                platforms={camPlatforms}
+                active={plat}
+                statusFor={statusFor}
+                onSelect={setPlat}
+              />
+            </View>
+            <View style={{ gap: 6, minWidth: 112, paddingTop: 4 }}>
+              {[
+                { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
+                { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
+                { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
+              ].map((r, i) => (
+                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                  <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
+                  <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </View>
 
