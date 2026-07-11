@@ -259,12 +259,12 @@ export default function DetailScreen() {
       />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 20 }}>
-        {/* Video — hero besar, CTA render paling penting di halaman ini.
-            Desktop: video 50% lebar, platform+info di sebelah kanan
-            (bukan ditumpuk di bawah — layar lebar sayang kalau video
-            dipaksa full-width). */}
-        <View style={{ flexDirection: isDesktop ? "row" : "column", gap: isDesktop ? 20 : 0, alignItems: "flex-start" }}>
-          <View style={{ width: isDesktop ? "50%" : "100%" }}>
+        {/* Desktop: video 50% lebar kiri, SEMUA panel lain (platform, sudut
+            cerita, skrip, caption, pra-kirim) di kolom kanan — bukan
+            ditumpuk di bawah, layar lebar sayang kalau semuanya full-width.
+            Mobile/tablet: tetap ditumpuk berurutan seperti sebelumnya. */}
+        <View style={{ flexDirection: isDesktop ? "row" : "column", gap: isDesktop ? 24 : 0, alignItems: "flex-start" }}>
+          <View style={{ width: isDesktop ? "40%" : "100%" }}>
             <VideoHero
               theme={theme}
               lang={lang}
@@ -282,90 +282,85 @@ export default function DetailScreen() {
             />
           </View>
 
-          {/* Platform tujuan (rasio + status render) + info format */}
-          <View style={{
-            flex: isDesktop ? 1 : undefined,
-            width: isDesktop ? undefined : "100%",
-            flexDirection: "row",
-            gap: 12,
-            marginTop: isDesktop ? 0 : 14,
-            alignItems: "flex-start",
-          }}>
-            <View style={{ flex: 1 }}>
-              <PlatformPicker
-                theme={theme}
-                platforms={camPlatforms}
-                active={plat}
-                statusFor={statusFor}
-                onSelect={setPlat}
-              />
-            </View>
-            <View style={{ gap: 6, minWidth: 112, paddingTop: 4 }}>
-              {[
-                { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
-                { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
-                { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
-              ].map((r, i) => (
-                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                  <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
-                  <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        {/* Pemilih sudut cerita — beda fungsi dari platform di atas (skrip, bukan tujuan) */}
-        <View style={{ paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8 }}>
-          <Eyebrow color={theme.ink3}>{t.detail.hooks} · 5</Eyebrow>
-        </View>
-        <HookPicker theme={theme} lang={lang} active={hook} topHook={c.topHook} onSelect={setHook} />
-
-        {/* Skrip hook AI (hanya bila hasil Claude nyata tersedia) */}
-        {hasAI && aiHook?.script && (
-          <>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
-              <Eyebrow color={theme.ink3}>{lang === "en" ? "HOOK SCRIPT" : "SKRIP HOOK"}</Eyebrow>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: hk.color }} />
-                <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: hk.color, letterSpacing: 0.6 }}>CLAUDE</Text>
+          <View style={{ width: isDesktop ? undefined : "100%", flex: isDesktop ? 1 : undefined }}>
+            {/* Platform tujuan (rasio + status render) + info format */}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: isDesktop ? 0 : 14, alignItems: "flex-start" }}>
+              <View style={{ flex: 1 }}>
+                <PlatformPicker
+                  theme={theme}
+                  platforms={camPlatforms}
+                  active={plat}
+                  statusFor={statusFor}
+                  onSelect={setPlat}
+                />
+              </View>
+              <View style={{ gap: 6, minWidth: 112, paddingTop: 4 }}>
+                {[
+                  { l: lang === "en" ? "Aspect" : "Rasio", v: platMeta.ratio },
+                  { l: lang === "en" ? "Duration" : "Durasi", v: `≤ ${platMeta.maxSec}s` },
+                  { l: lang === "en" ? "Hashtags" : "Hashtag", v: `${platMeta.hashtags}` },
+                ].map((r, i) => (
+                  <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                    <Text style={{ fontFamily: FONT.mono, fontSize: 10.5, color: theme.ink3, letterSpacing: 0.4, textTransform: "uppercase" }}>{r.l}</Text>
+                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 10.5, color: theme.ink2 }}>{r.v}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-            <GlassPanel theme={theme} padding={14} style={{ borderLeftWidth: 3, borderLeftColor: hk.color }}>
-              <Text style={{ fontFamily: FONT.sansSemi, fontSize: 14, color: theme.ink, lineHeight: 21 }}>“{aiHook.script}”</Text>
+
+            {/* Pemilih sudut cerita — beda fungsi dari platform di atas (skrip, bukan tujuan) */}
+            <View style={{ paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8 }}>
+              <Eyebrow color={theme.ink3}>{t.detail.hooks} · 5</Eyebrow>
+            </View>
+            <HookPicker theme={theme} lang={lang} active={hook} topHook={c.topHook} onSelect={setHook} />
+
+            {/* Skrip hook AI (hanya bila hasil Claude nyata tersedia) */}
+            {hasAI && aiHook?.script && (
+              <>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
+                  <Eyebrow color={theme.ink3}>{lang === "en" ? "HOOK SCRIPT" : "SKRIP HOOK"}</Eyebrow>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: hk.color }} />
+                    <Text style={{ fontFamily: FONT.monoSemi, fontSize: 9, color: hk.color, letterSpacing: 0.6 }}>CLAUDE</Text>
+                  </View>
+                </View>
+                <GlassPanel theme={theme} padding={14} style={{ borderLeftWidth: 3, borderLeftColor: hk.color }}>
+                  <Text style={{ fontFamily: FONT.sansSemi, fontSize: 14, color: theme.ink, lineHeight: 21 }}>“{aiHook.script}”</Text>
+                </GlassPanel>
+              </>
+            )}
+
+            {/* Caption teradaptasi */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
+              <Eyebrow color={theme.ink3}>{lang === "en" ? "ADAPTED CAPTION" : "CAPTION TERADAPTASI"}</Eyebrow>
+              <Text style={{ fontFamily: FONT.mono, fontSize: 9.5, color: cap.len > cap.max * 0.92 ? theme.warn : theme.ink3, letterSpacing: 0.4 }}>
+                {capLoading ? "···" : `${cap.len}/${cap.max}`}
+              </Text>
+            </View>
+            <GlassPanel theme={theme} padding={14}>
+              {capLoading ? (
+                <Text style={{ fontFamily: FONT.mono, fontSize: 10, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>
+                  {lang === "en" ? `Adapting for ${platMeta.name}…` : `Mengadaptasi untuk ${platMeta.name}…`}
+                </Text>
+              ) : (
+                <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink, lineHeight: 20 }}>{cap.text}</Text>
+              )}
             </GlassPanel>
-          </>
-        )}
 
-        {/* Caption teradaptasi */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 16, paddingHorizontal: 4, paddingBottom: 8 }}>
-          <Eyebrow color={theme.ink3}>{lang === "en" ? "ADAPTED CAPTION" : "CAPTION TERADAPTASI"}</Eyebrow>
-          <Text style={{ fontFamily: FONT.mono, fontSize: 9.5, color: cap.len > cap.max * 0.92 ? theme.warn : theme.ink3, letterSpacing: 0.4 }}>
-            {capLoading ? "···" : `${cap.len}/${cap.max}`}
-          </Text>
+            {/* Pra-kirim — baris gagal bisa diketuk buat langsung ke perbaikannya */}
+            <PreflightPanel
+              theme={theme}
+              lang={lang}
+              title={t.detail.preflight}
+              rows={preflight}
+              allClear={allClear}
+              onFixRow={(k) => {
+                if (k === "format") handleGenerateAllRenders();
+                else if (k === "token") router.push("/profile");
+              }}
+            />
+          </View>
         </View>
-        <GlassPanel theme={theme} padding={14}>
-          {capLoading ? (
-            <Text style={{ fontFamily: FONT.mono, fontSize: 10, color: theme.ink3, letterSpacing: 0.6, textTransform: "uppercase" }}>
-              {lang === "en" ? `Adapting for ${platMeta.name}…` : `Mengadaptasi untuk ${platMeta.name}…`}
-            </Text>
-          ) : (
-            <Text style={{ fontFamily: FONT.sans, fontSize: 13, color: theme.ink, lineHeight: 20 }}>{cap.text}</Text>
-          )}
-        </GlassPanel>
-
-        {/* Pra-kirim — baris gagal bisa diketuk buat langsung ke perbaikannya */}
-        <PreflightPanel
-          theme={theme}
-          lang={lang}
-          title={t.detail.preflight}
-          rows={preflight}
-          allClear={allClear}
-          onFixRow={(k) => {
-            if (k === "format") handleGenerateAllRenders();
-            else if (k === "token") router.push("/profile");
-          }}
-        />
       </ScrollView>
 
       <FloatingActionBar>
